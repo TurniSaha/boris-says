@@ -189,6 +189,32 @@ describe('runQualityCascade — early gates', () => {
   });
 });
 
+describe('runQualityCascade — firing gate is guard-safe on a non-getState() CoachState', () => {
+  // runQualityCascade is EXPORTED, so a caller can pass a CoachState assembled by hand
+  // (not through getState(), which merges defaultState()'s `feedbackByLever: {}`). The
+  // firing gate reads state.feedbackByLever[lever] for the adaptive floor; without the
+  // `?? {}` guard that is a TypeError on the hot path. This drives a FIRE verdict all the
+  // way to the gate with feedbackByLever absent — it must degrade gracefully (still fire),
+  // never throw.
+  it('a state literal WITHOUT feedbackByLever reaches the firing gate without throwing', async () => {
+    const full = defaultState();
+    // Simulate a caller-built state missing the field (as if it never saw defaultState()).
+    const { feedbackByLever: _drop, ...partial } = full;
+    const state = partial as unknown as CoachState;
+
+    const res = await runQualityCascade(
+      baseInput({
+        prompt: 'refactor this whole module, it is a mess',
+        sessionId: nextSession(),
+        state,
+        transcript: ['earlier prompt one', 'earlier prompt two'],
+      }),
+    );
+    // The gate ran (no crash) and, with a fire verdict + no adaptive delta, it fires.
+    expect(res).not.toBeNull();
+  });
+});
+
 describe('runQualityCascade — prospector tier', () => {
   it('prospector below the escalate band → silence (judge never called)', async () => {
     const sessionId = nextSession();

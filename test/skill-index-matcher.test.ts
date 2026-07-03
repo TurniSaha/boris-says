@@ -332,3 +332,108 @@ describe('community strict floors on the JUDGE path; relaxed for user-initiated 
     expect(hits.map((h) => h.name)).toEqual(['review-helper']);
   });
 });
+
+// ── /coach find single-word recall (the newcomer day-one search box) ─────────
+// The judge path keeps the SCORE_FLOOR/DISTINCT_FLOOR precision wall; the typed
+// /coach find path (userInitiated) must behave like a search box: one strong
+// name/keyword hit surfaces. Bounded (top-K) and ordered (score-desc, official-first).
+describe('matchExternalSkills — userInitiated single-word recall (the /coach find search box)', () => {
+  it('a bare single-word NAME hit surfaces for the typed query (was rejected by the judge floor)', () => {
+    // 'pdf': name hit (score 3, distinct 1) — below the judge floor (4/2), yet a newcomer
+    // typing 'pdf' into the search box must get the pdf skill.
+    const judge = matchExternalSkills('pdf', FIXTURE_INDEX, NONE);
+    expect(judge).toEqual([]); // judge path stays silent (precision wall intact).
+    const typed = matchExternalSkills('pdf', FIXTURE_INDEX, NONE, undefined, { userInitiated: true });
+    expect(typed.map((h) => h.name)).toEqual(['pdf']);
+  });
+
+  it('a single-word KEYWORD hit surfaces for the typed query', () => {
+    // 'excel' hits an xlsx keyword; 'slides' hits a pptx keyword — one keyword token
+    // (distinct 1) is enough on the typed path.
+    const idx = indexOf([
+      entry({ name: 'pptx', keywords: ['presentation', 'slides', 'deck'] }),
+      entry({ name: 'xlsx', keywords: ['excel', 'spreadsheet', 'xlsx'] }),
+    ]);
+    expect(
+      matchExternalSkills('slides', idx, NONE, undefined, { userInitiated: true }).map((h) => h.name),
+    ).toEqual(['pptx']);
+    expect(
+      matchExternalSkills('excel', idx, NONE, undefined, { userInitiated: true }).map((h) => h.name),
+    ).toEqual(['xlsx']);
+  });
+
+  it('a two-word phrase where only ONE token hits still surfaces (generate pdf, unit testing)', () => {
+    const idx = indexOf([
+      entry({ name: 'pdf', keywords: ['pdf', 'extraction'] }),
+      entry({ name: 'webapp-testing', keywords: ['playwright', 'testing'], category: 'testing' }),
+    ]);
+    // 'generate' is a stopword-free miss; 'pdf' hits the pdf name token.
+    expect(
+      matchExternalSkills('generate pdf', idx, NONE, undefined, { userInitiated: true }).map((h) => h.name),
+    ).toEqual(['pdf']);
+    // 'unit' misses; 'testing' near-matches the 'testing' keyword (exact token).
+    expect(
+      matchExternalSkills('unit testing', idx, NONE, undefined, { userInitiated: true }).map((h) => h.name),
+    ).toContain('webapp-testing');
+  });
+
+  it('community entries surface too on the typed path (no community surcharge for userInitiated)', () => {
+    const idx = indexOf([entry({ name: 'firecrawl', keywords: ['scraping', 'crawl', 'web'], trust: 'community' })]);
+    expect(
+      matchExternalSkills('scraping', idx, NONE, undefined, { userInitiated: true }).map((h) => h.name),
+    ).toEqual(['firecrawl']);
+  });
+
+  it('a garbage single word that hits NOTHING still returns [] (recall, not noise)', () => {
+    expect(
+      matchExternalSkills('zzzquux', FIXTURE_INDEX, NONE, undefined, { userInitiated: true }),
+    ).toEqual([]);
+  });
+
+  it('userInitiated recall stays bounded + ranked: name hits outrank keyword-only, k-capped', () => {
+    const entries = [
+      entry({ name: 'pdf', keywords: ['pdf'] }), // name hit (3)
+      ...Array.from({ length: 6 }, (_, i) =>
+        entry({ name: `pdf-tool-${i}`, id: `fixture/pdf-tool-${i}`, keywords: ['pdf', 'docs'] }),
+      ),
+    ];
+    const hits = matchExternalSkills('pdf', indexOf(entries), NONE, 5, { userInitiated: true });
+    expect(hits.length).toBeLessThanOrEqual(5);
+    expect(hits[0].name).toBe('pdf'); // direct name-token hit ranks first.
+  });
+
+  it('the SHIPPED real index: the newcomer 10-query set now surfaces real skills (userInitiated)', () => {
+    const real = loadSkillIndex();
+    expect(real).not.toBeNull();
+    const expectHit = (q: string) => {
+      const hits = matchExternalSkills(q, real as SkillIndex, NONE, undefined, { userInitiated: true });
+      expect(hits.length, `query "${q}" should surface at least one skill`).toBeGreaterThan(0);
+    };
+    // The tour-driven newcomer queries that the committed index CAN serve (each has a
+    // real name/keyword token present). 'powerpoint' is intentionally absent below: the
+    // pptx entry carries 'presentation'/'slides'/'deck' but NOT the literal token
+    // 'powerpoint', so it is a data gap in the index, not a matcher-recall gap — no floor
+    // change can surface a token that isn't there. ('create slides' does hit pptx.)
+    for (const q of [
+      'pdf',
+      'generate pdf',
+      'read excel files',
+      'create slides',
+      'web scraping',
+      'write tests',
+      'unit testing',
+      'commit message',
+    ]) {
+      expectHit(q);
+    }
+  });
+
+  it('the JUDGE path is UNTOUCHED by the recall relaxation (no over-fire regression)', () => {
+    const real = loadSkillIndex();
+    expect(real).not.toBeNull();
+    // These single-word queries must STILL be silent on the unprompted judge path.
+    for (const q of ['pdf', 'powerpoint', 'testing']) {
+      expect(matchExternalSkills(q, real as SkillIndex, NONE)).toEqual([]);
+    }
+  });
+});

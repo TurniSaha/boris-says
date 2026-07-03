@@ -38,7 +38,7 @@ Subcommands:
   entries: 272 official + 100 curated community) on demand — top matches with source URL, stars, and the install command.
   Fully offline, no LLM call; never installs anything.
 - `/coach dismiss` — mark the last-surfaced HABIT pattern dismissed (never resurfaces).
-- `/coach 👍` (or `up`/`good`) — rate the last 🐾 tip HELPFUL → that lever fires more (after ≥3 ratings).
+- `/coach 👍` (or `up`/`good`) — rate the last 🤖 quality tip HELPFUL → that lever fires more (after ≥3 ratings).
 - `/coach 👎` (or `down`/`bad`) — rate the last tip UNHELPFUL → that lever fires less. Each rating also
   appends a labeled anchor to the local feedback corpus.
 - `/coach undo` — revert the most recent rating.

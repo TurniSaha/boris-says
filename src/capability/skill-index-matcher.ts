@@ -99,6 +99,10 @@ function normPhrase(text: string): string {
  *
  * @param excludedNames folded names to drop (installed skills, curated skills,
  *   capability ids/triggers) — installed-catalog-wins at match time.
+ * @param opts.userInitiated the TYPED `/coach find` path (never the judge). On this path
+ *   the precision wall is relaxed to a RECALL floor so the box behaves like a search box:
+ *   one strong name-token hit (or a ≥2-token keyword hit) surfaces. Results stay bounded
+ *   (top-K) and ranked. The judge path (userInitiated omitted/false) is unchanged.
  */
 export function matchExternalSkills(
   prompt: string,
@@ -170,7 +174,17 @@ export function matchExternalSkills(
     // (an ordinary two-word phrase) score exactly the surcharged floor and must not fire.
     const distinctFloor = communityStrict ? DISTINCT_FLOOR + 1 : DISTINCT_FLOOR;
     const aboveFloor = (score >= scoreFloor && distinct >= distinctFloor) || exactNameMatch;
-    if (!aboveFloor) continue;
+
+    // RECALL FLOOR for the typed /coach find box ONLY (userInitiated). A newcomer is
+    // literally told on the tour to "/coach find <task>", so the box must behave like a
+    // search box: ONE concordant signal (a name, keyword, or category token hit) surfaces
+    // the skill. This is well below the judge's SCORE_FLOOR/DISTINCT_FLOOR precision wall,
+    // which is UNTOUCHED here — this branch never runs on the judge path, so there is no
+    // over-fire regression. Results stay bounded by the top-K cap and ranked
+    // score-desc/official-first below, so a broad query never floods the terminal.
+    const recallHit = userInitiated && distinct >= 1;
+
+    if (!aboveFloor && !recallHit) continue;
 
     scored.push({ entry, score });
   }

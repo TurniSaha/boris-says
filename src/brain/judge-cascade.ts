@@ -8,7 +8,7 @@
  * its own beyond the injected backend).
  *
  * PORT NOTE (SPEC §5, §15): this is the server `createJudgeDispatch` cascade
- * (the upstream coach service `pm-service/src/triggers/judge-dispatch.ts`) with EVERY server seam
+ * (bis-gastown `pm-service/src/triggers/judge-dispatch.ts`) with EVERY server seam
  * removed — no NormalizedEvent batch, no roomId/userId/source, no retrieval reader, no
  * peopleRepo, no nudgeDispatcher, no NudgeLedger, no CoachingOutcomesRepo, no adaptive
  * thresholdFor. The cascade ORDER and the THRESHOLDS are unchanged; identity collapses
@@ -373,7 +373,7 @@ export async function runQualityCascade(input: QualityCascadeInput): Promise<Qua
   // MORE). The delta is 0 until ≥ N ratings on that lever (no single-rating swing), bounded,
   // and computed PURELY from the passed-in state — so the gate stays a pure decision.
   const lever = verdict.primary_lever || 'goal_clarity';
-  const floorDelta = adaptiveFloorDelta(state.feedbackByLever[lever]);
+  const floorDelta = adaptiveFloorDelta((state.feedbackByLever ?? {})[lever]);
   const adaptiveFloor = skill.preRunConfidence + floorDelta;
   const eligiblePhase = skill.interruptEligiblePhases.has(verdict.phase);
   if (!(eligiblePhase && verdict.interrupt && verdict.confidence >= adaptiveFloor)) {

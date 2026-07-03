@@ -42,7 +42,7 @@ export const COACH_FIRST_RUN_TOUR = [
     "right plan, skill, or habit, exactly when you need it.",
   "Watch-first: I observe silently for your first ~3 sessions / 30 prompts before I critique " +
     "— run /coach status to see what I withheld while I learned your style.",
-  "Need a tool now? Try /coach find <task> (e.g. /coach find pdf extraction) to pull the right " +
+  "Need a tool now? Try /coach find <task> (e.g. /coach find excel spreadsheet) to pull the right " +
     "skill on demand — offline, nothing installed for you.",
   "/coach off turns me off anytime. Type \"" +
     COACH_SENTINEL_PHRASE +

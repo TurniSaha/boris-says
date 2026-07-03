@@ -201,13 +201,6 @@ export function buildOutcomeReport(events) {
     };
 }
 /**
- * Render the report as ONE short factual line (or '' when there is NOTHING measured — never
- * fabricate a "0 tests passed" or a passing default). Each clause is verbatim-from-disk or a
- * labeled proxy. NO score. Examples:
- *   "Last session: 422 tests passed, 96% coverage, 3 files changed, committed."
- *   "Last session: no test run detected; 2 files changed."
- */
-/**
  * item 6: the honest count NOUN for a runner. `go test` reports pass/fail per PACKAGE (there
  * is no per-test count in its summary — goSummary counts `ok`/`FAIL` package lines), so the
  * count is PACKAGES, not tests. Every other whitelisted runner (vitest/jest/pytest/cargo)
@@ -217,6 +210,14 @@ function testCountUnit(runner, count) {
     const singular = runner === 'go' ? 'package' : 'test';
     return count === 1 ? singular : `${singular}s`;
 }
+/**
+ * Render the report as ONE short factual line (or '' when there is NOTHING measured — never
+ * fabricate a "0 tests passed" or a passing default). Each clause is verbatim-from-disk or a
+ * labeled proxy, joined with ", " — and the "no test run detected" clause TAILS the line
+ * (item 6), it never leads. NO score. Examples:
+ *   "Last session: 422 tests passed, 96% coverage, 3 files changed (+120/-40), committed."
+ *   "Last session: 2 files changed (+8/-3), no test run detected."
+ */
 export function renderOutcomeLine(report) {
     const parts = [];
     // item 6: whether a test run was detected — its clause moves to the END, not the lead.
