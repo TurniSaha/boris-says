@@ -7,7 +7,6 @@
           {
             "type": "command",
             "command": "command -v node >/dev/null 2>&1 || exit 0; [ -n \"${CLAUDE_PLUGIN_ROOT:-}\" ] && [ -f \"$CLAUDE_PLUGIN_ROOT/dist/hook.js\" ] && node \"$CLAUDE_PLUGIN_ROOT/dist/hook.js\" || exit 0",
-            "commandWindows": "if ((Get-Command node -ErrorAction SilentlyContinue) -and $env:CLAUDE_PLUGIN_ROOT -and (Test-Path \"$env:CLAUDE_PLUGIN_ROOT\\dist\\hook.js\")) { node \"$env:CLAUDE_PLUGIN_ROOT\\dist\\hook.js\" }",
             "timeout": 5
           }
         ]
@@ -19,7 +18,6 @@
           {
             "type": "command",
             "command": "command -v node >/dev/null 2>&1 || exit 0; [ -n \"${CLAUDE_PLUGIN_ROOT:-}\" ] && [ -f \"$CLAUDE_PLUGIN_ROOT/dist/stop-hook.js\" ] && node \"$CLAUDE_PLUGIN_ROOT/dist/stop-hook.js\" || exit 0",
-            "commandWindows": "if ((Get-Command node -ErrorAction SilentlyContinue) -and $env:CLAUDE_PLUGIN_ROOT -and (Test-Path \"$env:CLAUDE_PLUGIN_ROOT\\dist\\stop-hook.js\")) { node \"$env:CLAUDE_PLUGIN_ROOT\\dist\\stop-hook.js\" }",
             "timeout": 10
           }
         ]
@@ -31,7 +29,6 @@
           {
             "type": "command",
             "command": "command -v node >/dev/null 2>&1 || exit 0; [ -n \"${CLAUDE_PLUGIN_ROOT:-}\" ] && [ -f \"$CLAUDE_PLUGIN_ROOT/dist/session-outcome.js\" ] && node \"$CLAUDE_PLUGIN_ROOT/dist/session-outcome.js\" || exit 0",
-            "commandWindows": "if ((Get-Command node -ErrorAction SilentlyContinue) -and $env:CLAUDE_PLUGIN_ROOT -and (Test-Path \"$env:CLAUDE_PLUGIN_ROOT\\dist\\session-outcome.js\")) { node \"$env:CLAUDE_PLUGIN_ROOT\\dist\\session-outcome.js\" }",
             "timeout": 10
           }
         ]

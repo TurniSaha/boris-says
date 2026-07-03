@@ -129,12 +129,13 @@ describe('composeHabitTip — cites the count + fix (§7.4/§7.5 #2)', () => {
     expect(composeHabitTip(mkPattern(), 1)).toContain('in your last 1 session —');
   });
 
-  it('a draft-less pattern tip is byte-identical to the pre-M3 format (no /coach build)', () => {
+  it('a draft-less pattern tip uses the unified `🐾 habit:` body (no `PM:` leftover, no /coach build)', () => {
     const tip = composeHabitTip(mkPattern(), 3);
     expect(tip).toBe(
-      "🐾 PM: you've asked for a next-session prompt in your last 3 sessions — " +
+      "🐾 habit: you've asked for a next-session prompt in your last 3 sessions — " +
         'bake a prompt-handoff into your /context-handoff command.',
     );
+    expect(tip).not.toContain('PM:'); // the pre-rename pm-service prefix is gone.
     expect(tip).not.toContain('/coach build');
   });
 

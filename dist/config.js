@@ -1,3 +1,20 @@
+/**
+ * src/config.ts — paths, defaults, and the resolved judge path (SPEC §2, §8.1, §13).
+ *
+ * Pure / DI-friendly: every function takes its environment (env, dirname) as an
+ * argument so a test can drive any base dir / plugin root without touching real
+ * process globals. Nothing here does I/O except `isEnabled`, which reads state.json
+ * through the injected store (and that read never throws — store contract).
+ *
+ * BASE DIR: ~/.claude/prompt-coach, overridable via PROMPT_COACH_DIR (tests point this
+ * at a tmpdir). This is the single root for inbox/mailbox/patterns/state (§2).
+ *
+ * JUDGE PATH (load-bearing, §8.1/§11.1): the detached judge is path-ANCHORED to
+ * CLAUDE_PLUGIN_ROOT/dist/judge.js when the plugin root is known, else the hook's OWN
+ * __dirname-relative dist/judge.js. NEVER cwd-relative — a plugin installs under
+ * ~/.claude/plugins/cache/.../dist/ so a bare `dist/judge.js` resolves against the
+ * user's cwd and is never found.
+ */
 import { join } from 'node:path';
 import { DEFAULT_BASE_DIR } from './state/store.js';
 /** The compiled judge filename relative to the dist root. */
@@ -40,17 +57,6 @@ export function resolveBaseDir(env = process.env) {
     if (typeof override === 'string' && override.trim().length > 0)
         return override;
     return DEFAULT_BASE_DIR;
-}
-/** The concrete state/patterns paths under the base dir (§2). Mailbox/inbox are owned by the store. */
-export function paths(env = process.env) {
-    const baseDir = resolveBaseDir(env);
-    return {
-        baseDir,
-        statePath: join(baseDir, 'state.json'),
-        patternsPath: join(baseDir, 'patterns.json'),
-        mailboxDir: join(baseDir, 'mailbox'),
-        inboxDir: join(baseDir, 'inbox'),
-    };
 }
 /**
  * Resolve the absolute path to the compiled judge (`dist/judge.js`) the hook spawns

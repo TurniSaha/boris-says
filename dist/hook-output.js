@@ -16,8 +16,8 @@
  *   (Citation: code.claude.com/docs/en/hooks.md — "How Outputs Are Surfaced".)
  *
  *   NOTE: `systemMessage` renders as a plain UI string, so the ANSI box collapses to plain
- *   text — still clearly "🐾 PM COACH … <tip>". The banner formatter keeps the 🐾 marker so
- *   it reads as a coach message either way.
+ *   text — still clearly a "🤖 Boris says …" coach message (habit nudges carry a 🐾 body
+ *   marker). The banner formatter keeps those markers so it reads as a coach message either way.
  */
 /**
  * Emit a coaching tip to the HUMAN via the `systemMessage` JSON channel (§8.2). Claude Code

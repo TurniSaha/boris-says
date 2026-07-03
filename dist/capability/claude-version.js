@@ -1,7 +1,6 @@
 import { spawnSync as nodeSpawnSync } from 'node:child_process';
 /**
- * Capability-awareness — the `claude --version` probe (ported from
- * upstream-extension/src/claude-version.ts, §0.1 row 11).
+ * Capability-awareness — the `claude --version` probe (SPEC §0.1 row 11).
  *
  * Runs `claude --version` and parses the LEADING semver out of stdout (the CLI
  * prints e.g. `2.1.185 (Claude Code)`). Returns the `x.y.z` string, or null on ANY

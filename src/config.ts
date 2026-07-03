@@ -15,7 +15,6 @@
  * ~/.claude/plugins/cache/.../dist/ so a bare `dist/judge.js` resolves against the
  * user's cwd and is never found.
  */
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_BASE_DIR, type Store } from './state/store.js';
 
@@ -69,23 +68,6 @@ export function resolveBaseDir(env: ConfigEnv = process.env): string {
   return DEFAULT_BASE_DIR;
 }
 
-/** The concrete state/patterns paths under the base dir (§2). Mailbox/inbox are owned by the store. */
-export function paths(env: ConfigEnv = process.env): {
-  baseDir: string;
-  statePath: string;
-  patternsPath: string;
-  mailboxDir: string;
-  inboxDir: string;
-} {
-  const baseDir = resolveBaseDir(env);
-  return {
-    baseDir,
-    statePath: join(baseDir, 'state.json'),
-    patternsPath: join(baseDir, 'patterns.json'),
-    mailboxDir: join(baseDir, 'mailbox'),
-    inboxDir: join(baseDir, 'inbox'),
-  };
-}
 
 /**
  * Resolve the absolute path to the compiled judge (`dist/judge.js`) the hook spawns

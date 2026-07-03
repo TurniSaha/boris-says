@@ -36,25 +36,34 @@ it. This is the most common "it didn't fire" cause.
 
 ## Verify it works (the 🤖 eyeball)
 
-After installing **and reloading**, type a real prompt a senior engineer would stop
-you on, e.g.:
+After installing **and reloading**, the fastest same-turn liveness check (works on a
+brand-new install, no LLM call, no watch window) — type exactly:
+
+```
+when life gives you lemons
+```
+
+Boris replies `make lemonade! 🍋` on the **same turn**. If you see that, the hooks are
+wired and the coach is awake.
+
+**Then try a real coaching nudge.** Type a prompt a senior engineer would stop you on:
 
 ```
 rewrite the whole billing module onto a new pricing engine
 ```
 
-At the **end of that same turn** you should see the "🤖 Boris says: I'm in your corner!" banner with a one-line nudge (e.g. "sketch the steps and the riskiest part
-before diving in"). The judge runs in the background so your prompt never freezes;
-if it finishes after the turn ends, the tip arrives on your next prompt with a
-`⏪ about your prompt: "…"` label. Terse, expert, or continuation prompts stay
-silent (precision over recall).
+At the **end of that same turn** you should see the "🤖 Boris says: I'm in your corner!"
+banner with a one-line nudge (e.g. "sketch the steps and the riskiest part before diving
+in"). The judge runs in the background so your prompt never freezes; if it finishes after
+the turn ends, the tip arrives on your next prompt with a `⏪ about your prompt: "…"` label.
+Terse, expert, or continuation prompts stay silent (precision over recall).
 
-**Fresh install?** Prompt-quality critiques are **observe-only for your first 3
-sessions and 30 prompts** — the coach logs what it would have said (see "withheld
-critiques" in `/coach status`), announces itself once, then enables. Opportunity
-tips (skill/capability suggestions) fire from day one. Quick liveness check that
-works immediately: type `when life gives you lemons` → it replies
-`make lemonade! 🍋` on the same turn.
+> **Fresh install — this nudge is withheld at first.** Prompt-quality critiques are
+> **observe-only for your first 3 sessions and 30 prompts** — the coach logs what it
+> *would* have said (see "withheld critiques" in `/coach status`), announces itself once,
+> then enables. So on a new install the billing prompt above stays silent (or shows the
+> one-time first-run tour) — that is expected. Opportunity tips (skill/capability
+> suggestions) fire from day one, and the lemons check above always works.
 
 ## Controls
 
@@ -73,13 +82,18 @@ works immediately: type `when life gives you lemons` → it replies
 
 ## Teaching the coach (live self-tuning)
 
-After a tip fires (🤖 quality tip or 🐾 habit nudge), rate it — the coach learns from YOUR judgment:
+After a **🤖 quality tip** fires, rate it — the coach learns from YOUR judgment:
 
 ```
-/coach 👍         # that tip was helpful  (also: /coach up | good)
-/coach 👎         # that tip was annoying/wrong  (also: /coach down | bad)
+/coach 👍         # that quality tip was helpful  (also: /coach up | good)
+/coach 👎         # that quality tip was annoying/wrong  (also: /coach down | bad)
 /coach undo       # revert the last rating
 ```
+
+`/coach 👍`/`👎` rate the last **🤖 quality tip** (the lever-based nudges). **🐾 habit
+nudges** are not rated this way — their control is `/coach dismiss` (the pattern never
+resurfaces) or `/coach build` (write its drafted fix). Rating right after a habit nudge
+would land on the previous quality tip, so stick to `dismiss`/`build` for habits.
 
 Once a lever (e.g. plan-first, reversibility) has ≥3 ratings, its firing
 threshold adapts: a lever you keep 👎-ing fires LESS; a 👍-loved one fires MORE
@@ -112,11 +126,24 @@ taste examples — the same channel every judge call already uses.
    ("N tests passed" / "no test run detected") — never a fabricated score.
 
 ## Privacy / cost
-- All state lives under `~/.claude/prompt-coach/` (plain JSON). Nothing leaves
-  your machine except the coach's own LLM call, which goes through `claude -p`
-  on your subscription.
+- All state lives under `~/.claude/prompt-coach/` (plain JSON). No boris-says server,
+  no telemetry — nothing about you or your prompts is ever sent to us or a third party.
+- Two kinds of outbound calls, both first-party and carrying none of your data: (1) the
+  coach's own LLM call via `claude -p` on your subscription, and (2) a **once-per-7-days
+  background GitHub refresh** of the public skill index (`api.github.com` +
+  `raw.githubusercontent.com`, static `boris-says` user-agent, no prompt text). Opt out
+  with `PROMPT_COACH_NO_INDEX_REFRESH=1` — Boris then uses only the committed static index.
 - The hook is non-blocking and returns in well under the budget; the judge runs
   detached in the background.
+
+## Uninstall
+```
+/plugin uninstall boris-says      # stop the hooks
+rm -rf ~/.claude/prompt-coach      # delete local state (includes verbatim prompt text)
+```
+`/plugin uninstall` alone leaves `~/.claude/prompt-coach/` on disk. That directory holds
+your rated taste examples and coach state — including prompt text you typed — so remove
+it too for a clean uninstall.
 
 ## Anti-overengineering (retrospective)
 When a session ends having produced an unusually large diff, the **outcome recap**

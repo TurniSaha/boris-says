@@ -246,6 +246,38 @@ describe('runJudge — (2) habit delivery (§7.4) yields to quality', () => {
     expect(updated.status).toBe('surfaced');
   });
 
+  it('§5.5.6c fuzzy fallback: a NON-lexical but handoff-ish prompt fires via ONE Haiku yes', async () => {
+    const store = createStore(baseDir);
+    const patterns = createPatternsStore(baseDir);
+    patterns.upsertPatterns([openPattern()]);
+    // Spend the first-prompt liveness/tour on a non-matching priming prompt.
+    const prime = writeInboxFile(store, { prompt: 'a priming prompt', transcript_path: '', session_id: 'sFuzz', cwd: '' });
+    await runJudge(baseDeps(store, patterns, prime, { backend: mockBackend({ haiku: '0.0', sonnet: '[]' }).backend }));
+    store.claimMailbox('sFuzz');
+
+    // A prompt that does NOT lexically match the pattern's phrases but LOOKS handoff-ish
+    // ("next session"). The deterministic matchHabit returns null → the fuzzy fallback runs
+    // ONE Haiku call; here it answers "yes" so the habit fires.
+    const inbox = writeInboxFile(store, {
+      prompt: 'can you jot down where we should pick things back up in the next session',
+      transcript_path: '',
+      session_id: 'sFuzz',
+      cwd: '',
+    });
+    // Quality below band (haiku '0.0') → silent, so the habit path is the only surface.
+    // The SAME backend's haiku answers the fuzzy yes/no; return 'yes' for it.
+    await runJudge(
+      baseDeps(store, patterns, inbox, {
+        backend: mockBackend({ haiku: 'yes', sonnet: FIRING_VERDICT }).backend,
+      }),
+    );
+
+    const tips = store.claimMailbox('sFuzz');
+    expect(tips).toHaveLength(1);
+    expect(tips[0].kind).toBe('habit');
+    expect(patterns.readPatterns()[0].status).toBe('surfaced');
+  });
+
   it('yields to a quality tip on the same turn (no habit when quality fired)', async () => {
     const store = createStore(baseDir);
     seedClosedWatch(store);

@@ -21,7 +21,7 @@ import { buildJudgeUser, buildProspectorUser, renderExternalSection, } from './p
 import { reflex } from './judge-reflex.js';
 import { classifyPromptIntent } from './prompt-intent.js';
 import { namesDestructiveDataOp } from './destructive-op.js';
-import { createCoachLiveness, COACH_FIRST_RUN_TOUR } from './coach-liveness.js';
+import { isCoachSentinel, COACH_SENTINEL_REPLY, COACH_FIRST_RUN_TOUR } from './coach-liveness.js';
 import { parseJudgeVerdict, parseProspectorScore, } from './parse-verdict.js';
 import { formatCoachBanner } from './mailbox-format.js';
 import { renderTasteSection } from './taste.js';
@@ -59,8 +59,6 @@ const CHANGE_DIRECTED_LEVERS = new Set([
 ]);
 /** The neutral "no skill" action. */
 export const NO_SKILL_ACTION = { kind: 'none' };
-/** A process-local liveness checker (one per process; sessionId-keyed — §15c). */
-const liveness = createCoachLiveness();
 /** Cost-disclosure clause for a capability's costClass (disclose, never gate — §17). */
 function costClauseFor(costClass) {
     if (costClass === 'expensive_multiagent')
@@ -125,11 +123,10 @@ export async function runQualityCascade(input) {
     const { prompt, backend, skill, state, catalog, sessionId, now } = input;
     const observe = input.observe ?? (() => { });
     // (1) LIVENESS (zero cost). SENTINEL ('when life gives you lemons') short-circuits with the
-    // canned reply — fire-every-time, no persistence needed (pure text gate via `liveness`).
-    const live = liveness.check(sessionId, prompt);
-    if (live.sentinel !== null) {
+    // canned reply — fire-every-time, no persistence needed (pure text gate via isCoachSentinel).
+    if (isCoachSentinel(prompt)) {
         observe('liveness_sentinel', true);
-        return { tip: formatCoachBanner(live.sentinel) };
+        return { tip: formatCoachBanner(COACH_SENTINEL_REPLY) };
     }
     // The FIRST-RUN TOUR is ONE-TIME PER INSTALL. Its flag is PERSISTENT install-wide
     // (input.firstSeen, computed by the caller via store.markTourShownIfFirst) — the every-

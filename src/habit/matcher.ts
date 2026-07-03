@@ -159,14 +159,16 @@ const DRAFT_KIND_LABEL: Record<string, string> = {
 };
 
 /**
- * Compose the cited habit nudge (SPEC §7.4/§7.5 guardrail #2 — name WHEN, with a
- * concrete fix). No button (advice text). The 🐾 PM: prefix mirrors the source.
+ * Compose the cited habit nudge BODY (SPEC §7.4/§7.5 guardrail #2 — name WHEN, with a
+ * concrete fix). No button (advice text). The `🐾 habit:` marker tags it as a habit nudge;
+ * the caller wraps this body in the shared `formatCoachBanner` so Boris speaks with ONE
+ * voice everywhere (the old bare `🐾 PM:` prefix — a pre-rename pm-service leftover — is gone).
  * M3: when the pattern carries a draft, append the `/coach build` affordance —
  * same intent-gated fire, same cooldown; a draft-less tip stays byte-identical.
  */
 export function composeHabitTip(pattern: Pattern, occurrenceCount: number): string {
   const sessions = occurrenceCount === 1 ? 'session' : 'sessions';
-  const base = `🐾 PM: you've ${pattern.habit} in your last ${occurrenceCount} ${sessions} — ${pattern.fix}.`;
+  const base = `🐾 habit: you've ${pattern.habit} in your last ${occurrenceCount} ${sessions} — ${pattern.fix}.`;
   if (!pattern.draft) return base;
   const label = DRAFT_KIND_LABEL[pattern.draft.kind] ?? pattern.draft.kind;
   return `${base} — a draft ${label} is ready: run /coach build to write it for review (or /coach dismiss to reject)`;

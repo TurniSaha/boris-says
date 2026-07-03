@@ -140,6 +140,9 @@ function drain(store: Store, sessionId: string, out: NodeJS.WriteStream | undefi
   if (tips.length === 0) return;
   // Quality-before-habit ordering is the store's job; print the highest-priority tip.
   const tip = tips[0];
+  // Single banner per turn (deliberate) — but re-queue the tail so a lower-priority tip
+  // deferred behind this one is NOT silently discarded; it surfaces on the next drain.
+  for (const rest of tips.slice(1)) store.writeMailbox(sessionId, rest);
   const message =
     typeof tip.prompt === 'string' && tip.prompt.length > 0
       ? withPromptAttribution(tip.message, tip.prompt)

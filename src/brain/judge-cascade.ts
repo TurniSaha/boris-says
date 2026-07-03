@@ -27,7 +27,7 @@ import type { ExternalCandidate } from '../capability/skill-index.js';
 import { reflex } from './judge-reflex.js';
 import { classifyPromptIntent } from './prompt-intent.js';
 import { namesDestructiveDataOp } from './destructive-op.js';
-import { createCoachLiveness, COACH_FIRST_RUN_TOUR } from './coach-liveness.js';
+import { isCoachSentinel, COACH_SENTINEL_REPLY, COACH_FIRST_RUN_TOUR } from './coach-liveness.js';
 import {
   parseJudgeVerdict,
   parseProspectorScore,
@@ -194,9 +194,6 @@ export interface QualityCascadeInput {
  */
 export type QualityCascadeResult = { tip: string; lever?: string } | null;
 
-/** A process-local liveness checker (one per process; sessionId-keyed — §15c). */
-const liveness = createCoachLiveness();
-
 /** Cost-disclosure clause for a capability's costClass (disclose, never gate — §17). */
 function costClauseFor(costClass: Capability['costClass']): string {
   if (costClass === 'expensive_multiagent') return EXPENSIVE_COST_CLAUSE;
@@ -265,11 +262,10 @@ export async function runQualityCascade(input: QualityCascadeInput): Promise<Qua
   const observe = input.observe ?? (() => {});
 
   // (1) LIVENESS (zero cost). SENTINEL ('when life gives you lemons') short-circuits with the
-  // canned reply — fire-every-time, no persistence needed (pure text gate via `liveness`).
-  const live = liveness.check(sessionId, prompt);
-  if (live.sentinel !== null) {
+  // canned reply — fire-every-time, no persistence needed (pure text gate via isCoachSentinel).
+  if (isCoachSentinel(prompt)) {
     observe('liveness_sentinel', true);
-    return { tip: formatCoachBanner(live.sentinel) };
+    return { tip: formatCoachBanner(COACH_SENTINEL_REPLY) };
   }
   // The FIRST-RUN TOUR is ONE-TIME PER INSTALL. Its flag is PERSISTENT install-wide
   // (input.firstSeen, computed by the caller via store.markTourShownIfFirst) — the every-

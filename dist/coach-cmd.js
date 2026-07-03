@@ -54,6 +54,17 @@ export function resolveBackendName(env, claudeOnPath) {
         return 'cli';
     return 'null';
 }
+/** Human-facing label for a resolved backend name (the `null` token reads as a bug otherwise). */
+export function describeBackend(name) {
+    switch (name) {
+        case 'api-metered':
+            return 'api-metered (metered API billing active)';
+        case 'cli':
+            return 'cli (Claude subscription — no per-call charge)';
+        case 'null':
+            return 'none (claude CLI not found and no API key — coaching paused)';
+    }
+}
 /** Real probe: is `claude` on PATH? Fail-closed on any error (never throws). */
 function defaultClaudeOnPath() {
     try {
@@ -201,7 +212,10 @@ export function runCoachCmd(subcommand, deps, extraArg) {
             }
             const loaded = loadIndexLoaded();
             if (loaded === null) {
-                out('coach: external skill index not available (run: npm run refresh-index)');
+                // The index ships committed with the plugin, so this is rare — a missing/corrupt
+                // data file. Point at the fix a plugin user can actually take (reinstall), not the
+                // dev-only npm workflow.
+                out('coach: external skill index not available (reinstall the plugin to restore it)');
                 return;
             }
             const index = loaded.index;
@@ -240,7 +254,7 @@ export function runCoachCmd(subcommand, deps, extraArg) {
             const allPatterns = patterns.readPatterns();
             const patternCount = allPatterns.length;
             out(`coach: enabled=${s.enabled}`);
-            out(`backend: ${backend}${backend === 'api-metered' ? ' (metered API billing active)' : ''}`);
+            out(`backend: ${describeBackend(backend)}`);
             out(`last tip: ${fmtTime(s.lastQualityTipAt)}`);
             out(`quality cooldown: ${fmtCooldownRemaining(s.lastQualityTipAt, QUALITY_COOLDOWN_MS, now)}`);
             out(`habit cooldown: ${fmtCooldownRemaining(s.lastHabitNudgeAt, HABIT_COOLDOWN_MS, now)}`);
@@ -317,7 +331,7 @@ export function runCoachCmd(subcommand, deps, extraArg) {
                 const rating = GOOD_ALIASES.has(sub) ? 'good' : 'bad';
                 const rated = store.rateLastTip(rating);
                 if (rated === null) {
-                    out('coach: no recent tip to rate (👍/👎 applies to the last 🐾 tip)');
+                    out('coach: no recent tip to rate (👍/👎 applies to the last 🤖 quality tip; habit 🐾 nudges use /coach dismiss)');
                     return;
                 }
                 // Append a labeled anchor to the offline-eval feedback corpus (a 👎 ⇒ this moment's

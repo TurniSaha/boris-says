@@ -4,8 +4,7 @@ import { homedir } from 'node:os';
 import { posix, win32 } from 'node:path';
 import { cwd as processCwd } from 'node:process';
 /**
- * Capability-awareness — the installed-SKILLS probe (ported from
- * upstream-extension/src/installed-skills-scan.ts, §0.1 row 12).
+ * Capability-awareness — the installed-SKILLS probe (SPEC §0.1 row 12).
  *
  * Scans the dev's on-disk skill DIRECTORIES (each with a SKILL.md) and returns a
  * deduped, SORTED string[] of skill ids (SKILL.md `name:` frontmatter when readable,

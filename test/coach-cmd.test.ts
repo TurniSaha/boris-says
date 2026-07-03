@@ -101,9 +101,11 @@ describe('runCoachCmd status', () => {
     expect(lines.join('\n')).toMatch(/backend: api-metered \(metered API billing active\)/);
   });
 
-  it('reports null backend when no API opt-in and claude not on PATH', () => {
+  it('reports a friendly "none" backend when no API opt-in and claude not on PATH', () => {
     runCoachCmd('status', makeDeps({ claudeOnPath: () => false }));
-    expect(lines.join('\n')).toMatch(/backend: null/);
+    // The human status line must NOT print the bare internal `null` token.
+    expect(lines.join('\n')).not.toMatch(/backend: null\b/);
+    expect(lines.join('\n')).toMatch(/backend: none \(claude CLI not found and no API key — coaching paused\)/);
   });
 
   it('reports cooldown remaining when a quality tip was recent', () => {
@@ -343,7 +345,7 @@ describe('runCoachCmd find + status external-index (M4)', () => {
   it('find with a missing index → friendly not-available line', () => {
     runCoachCmd('find', makeDeps({ loadSkillIndex: () => null }), 'pdf extraction');
     expect(lines.join('\n')).toContain(
-      'coach: external skill index not available (run: npm run refresh-index)',
+      'coach: external skill index not available (reinstall the plugin to restore it)',
     );
   });
 

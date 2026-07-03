@@ -3,8 +3,8 @@ import { satisfiesMinVersion } from './version.js';
 /**
  * THE CLAUDE CAPABILITY CATALOG — the descriptive knowledge base the coach draws on
  * to surface Claude Code's OWN capabilities the dev may not know exist, INSIDE the
- * nudges it already fires. Sibling of skill-catalog.ts (which owns SKILLS); this owns
- * CAPABILITIES (slash commands, keywords, modes, authoring primitives, CLI flags).
+ * nudges it already fires. Sibling of merged-skill-catalog.ts (which owns SKILLS); this
+ * owns CAPABILITIES (slash commands, keywords, modes, authoring primitives, CLI flags).
  *
  * TWO SOURCES OF TRUTH (the /design-sync lesson):
  *  - AVAILABILITY = the dev's machine. For per-dev-variable custom/plugin slash
@@ -14,10 +14,10 @@ import { satisfiesMinVersion } from './version.js';
  *    We NEVER surface a capability we cannot confirm THIS dev has (the trust-hazard
  *    invariant).
  *  - KNOWLEDGE (what/when/cost/min-version/kind) = Anthropic's official docs index
- *    (code.claude.com/docs/llms.txt) + the weekly whats-new digests. This seed is
- *    drawn from that snapshot (tasks/claude-docs-llms-index.txt) + the local
- *    `claude --help`/`--version` ground truth (tasks/claude-feature-catalog-research.md).
- *    Refresh via tasks/refresh-capability-catalog.mjs (spec §9).
+ *    (code.claude.com/docs/llms.txt) + the weekly whats-new digests, plus the local
+ *    `claude --help`/`--version` ground truth. This seed is hand-curated against that
+ *    snapshot; re-derive it from the current docs index + CLI help when Anthropic ships
+ *    new capabilities (spec §9).
  *
  * COST is DISCLOSURE, not a gate (owner decision): billed / expensive_multiagent
  * capabilities ARE eligible to surface; the nudge composer just MENTIONS the cost.

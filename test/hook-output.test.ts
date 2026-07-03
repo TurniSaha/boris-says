@@ -19,10 +19,10 @@ function fakeStream(): { stream: NodeJS.WriteStream; written: string[] } {
 describe('emitTip — systemMessage surface (§8.2, corrected)', () => {
   it('emits ONE JSON object with the tip under systemMessage (the human-visible channel)', () => {
     const { stream, written } = fakeStream();
-    emitTip('🐾 PM COACH — sketch the data contract first', stream);
+    emitTip('🤖 Boris says — sketch the data contract first', stream);
     const out = written.join('');
     const parsed = JSON.parse(out.trim());
-    expect(parsed.systemMessage).toBe('🐾 PM COACH — sketch the data contract first');
+    expect(parsed.systemMessage).toBe('🤖 Boris says — sketch the data contract first');
   });
 
   it('uses ONLY systemMessage — NOT additionalContext / hookSpecificOutput (never steers the model)', () => {

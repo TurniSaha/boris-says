@@ -26,7 +26,6 @@ import {
   createStore,
   type Store,
   type InboxPayload,
-  type CoachState,
 } from './state/store.js';
 import {
   createPatternsStore,
@@ -49,7 +48,7 @@ import { PROMPT_COACH_SKILL, resolveJudgeModel } from './brain/prompt-coach-skil
 import { parseFeedbackAnchors, selectTasteExamples } from './brain/taste.js';
 import { recentTranscriptWindow, MAX_TRANSCRIPT } from './jsonl/session-reader.js';
 import { readCorpusTypedPrompts } from './jsonl/corpus-reader.js';
-import { matchHabit, composeHabitTip } from './habit/matcher.js';
+import { matchHabit, fuzzyFallback, composeHabitTip } from './habit/matcher.js';
 import { runHabitMiner } from './habit/miner.js';
 import { createMergedSkillCatalog } from './capability/merged-skill-catalog.js';
 import { scanInstalledSkills } from './capability/scan-skills.js';
@@ -157,7 +156,7 @@ export async function runJudge(deps: JudgeDeps): Promise<void> {
 
   // (2) HABIT DELIVERY — independently guarded.
   try {
-    await runHabitStep(deps, payload, store, patternsStore, now, qualityDeposited);
+    await runHabitStep(deps, payload, store, patternsStore, backend, now, qualityDeposited);
   } catch {
     // swallow.
   }
@@ -256,7 +255,8 @@ async function runQualityStep(
   const showTour = firstSeenBeforeGreet && store.markTourShownIfFirst();
 
   // Commit the per-session greet AFTER the tour decision (its write is an engagement marker).
-  const firstSeen = store.markGreetedIfFirst(payload.session_id);
+  // Called for its side effect only — the cascade's tour trigger is `showTour`, not this return.
+  store.markGreetedIfFirst(payload.session_id);
 
   // W2-LEVEL1: load + select the owner's taste examples from the local feedback corpus.
   // Pure parse + select; cold-start (< floor) → [] → the judge input is byte-identical to
@@ -422,6 +422,7 @@ async function runHabitStep(
   payload: InboxPayload,
   store: Store,
   patternsStore: PatternsStore,
+  backend: LlmBackend,
   now: () => number,
   qualityDeposited: boolean,
 ): Promise<void> {
@@ -430,10 +431,16 @@ async function runHabitStep(
   if (store.habitOnCooldown(now())) return;
 
   const open = patternsStore.readPatterns().filter((p) => p.status === 'open');
-  const matched: Pattern | null = matchHabit(payload.prompt, open);
+  // §7.4 deterministic lexical match FIRST (no LLM). Only when it misses AND the prompt
+  // looks handoff-ish does the §5.5.6c fuzzy fallback spend ONE cheap Haiku yes/no call —
+  // bounded to ~1/dev/day by the 24h habit cooldown gate we already passed above.
+  const matched: Pattern | null =
+    matchHabit(payload.prompt, open) ?? (await fuzzyFallback(payload.prompt, open, backend));
   if (matched === null) return;
 
-  const tip = composeHabitTip(matched, matched.occurrenceCount);
+  // ONE voice: wrap the habit body in the shared Boris banner, exactly like a quality tip
+  // (the drain then applies the same ⏪-attribution when it surfaces late).
+  const tip = formatCoachBanner(composeHabitTip(matched, matched.occurrenceCount));
   store.writeMailbox(payload.session_id, {
     kind: 'habit',
     message: tip,
@@ -524,11 +531,6 @@ async function defaultCatalog(): Promise<MergedSkillCatalog> {
 }
 
 /**
- * Default available-to-this-dev capabilities: resolve every catalog entry against the
- * scanned installed-commands + probed CLI version (+ optional active model), keeping only
- * the available ones. Never throws (degrades to []).
- */
-/**
  * W2-LEVEL1 default taste-corpus reader: read `${baseDir}/feedback-anchors.jsonl` as text.
  * NEVER throws — a missing file / read error → '' (cold-start → no taste section). The pure
  * taste.ts helpers parse + select.
@@ -541,6 +543,11 @@ function readFeedbackAnchorsText(baseDir: string): string {
   }
 }
 
+/**
+ * Default available-to-this-dev capabilities: resolve every catalog entry against the
+ * scanned installed-commands + probed CLI version (+ optional active model), keeping only
+ * the available ones. Never throws (degrades to []).
+ */
 async function defaultCapabilities(
   activeModel: CapabilityModelFamily | undefined,
 ): Promise<readonly Capability[]> {

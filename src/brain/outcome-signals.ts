@@ -2,7 +2,7 @@
  * outcome-signals.ts — W2-OUTCOME (Phase 1): PURE extractors that turn the permissively-scanned
  * tool events (jsonl/outcome-reader.ts) into HONEST per-signal facts. No I/O, no clock.
  *
- * Honesty rules (docs/DESIGN-outcome-scoring.md §3) encoded here:
+ * Honesty rules (the outcome-scoring design; SPEC §5.2) encoded here:
  *  1. Every value carries provenance: 'measured' (real, from disk) vs 'no-signal' (not run /
  *     not recognized). A missing signal is NEVER 0 or a passing default.
  *  2. tests-passed emits ONLY on a WHITELISTED runner's own summary grammar in a paired

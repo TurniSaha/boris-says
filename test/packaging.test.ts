@@ -50,19 +50,25 @@ describe('hooks/hooks.json (SPEC §11.1)', () => {
     // node-guarded + always exit 0 (never blocks the prompt).
     expect(entry.command).toContain('command -v node');
     expect(entry.command).toContain('exit 0');
-    // SELF-LOCATING FALLBACK (the fix for the empty/unset CLAUDE_PLUGIN_ROOT failure mode):
-    // it must NOT collapse to a bare /dist/hook.js — there is a fallback root + an existence
-    // guard so the hook still finds dist/hook.js when the env var is empty.
-    expect(entry.command).toMatch(/CLAUDE_PLUGIN_ROOT:-|if .*CLAUDE_PLUGIN_ROOT/);
+    // EMPTY/UNSET-ENV GUARD (the fix for the empty/unset CLAUDE_PLUGIN_ROOT failure mode):
+    // `[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]` short-circuits to `exit 0` when the env var is empty,
+    // and `-f` verifies dist/hook.js exists before exec — so it never collapses to a bare
+    // `/dist/hook.js` module-not-found error on every prompt. (This is a fail-safe guard, not
+    // a self-locating fallback — there is no mechanism to rediscover the root when it is unset.)
+    expect(entry.command).toContain('CLAUDE_PLUGIN_ROOT:-');
     expect(entry.command).toContain('-f '); // existence check before exec.
     // The bare-collapse footgun must be gone (no unguarded "${CLAUDE_PLUGIN_ROOT}/dist").
     expect(entry.command).not.toContain('"${CLAUDE_PLUGIN_ROOT}/dist/hook.js"');
   });
 
-  it('has a Windows variant and a timeout', () => {
+  it('carries NO dead commandWindows field (not a real CC hook-schema key) + has a timeout', () => {
+    // `commandWindows` is NOT part of the Claude Code hook schema (verified: 0 occurrences in
+    // the 2.1.x binary; official docs say "There is no `commandWindows` field"). It was silently
+    // ignored dead config. Windows runs the POSIX `command` via Git Bash (CC's documented Windows
+    // shell); the field must stay removed so maintainers are not misled into thinking a separate
+    // PowerShell path is wired.
     const entry = hooks.hooks.UserPromptSubmit[0].hooks[0];
-    expect(entry.commandWindows).toContain('CLAUDE_PLUGIN_ROOT');
-    expect(entry.commandWindows).toContain('dist\\hook.js');
+    expect(entry).not.toHaveProperty('commandWindows');
     expect(entry.timeout).toBe(5);
   });
 });
@@ -128,9 +134,9 @@ describe('M2 — Stop hook registration (PLAN Step 8)', () => {
     expect(entry.command).not.toContain('"${CLAUDE_PLUGIN_ROOT}/dist/stop-hook.js"');
   });
 
-  it('has a Windows variant and a timeout covering the 7s poll + margin', () => {
+  it('carries NO dead commandWindows field + a timeout covering the 7s poll + margin', () => {
     const entry = hooks.hooks.Stop[0].hooks[0];
-    expect(entry.commandWindows).toContain('dist\\stop-hook.js');
+    expect(entry).not.toHaveProperty('commandWindows');
     expect(entry.timeout).toBe(10); // > STOP_DRAIN_POLL_MS (7s) with margin.
   });
 

@@ -94,6 +94,7 @@ export interface CoachState {
   lastQualityTipBySession: Record<string, number>;
   lastHabitNudgeAt: number | null;
   lastMinedAt: number | null;
+  /** Epoch-ms of the newest typed prompt the miner has consumed (§7.2 corpus-reader `ts > watermark`). */
   lastMinedWatermark: number;
   /** sessionId → primary levers already fired this session (SPEC §5.1 step 7). */
   leversUsedBySession: Record<string, string[]>;

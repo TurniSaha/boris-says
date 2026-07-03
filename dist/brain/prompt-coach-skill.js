@@ -197,12 +197,6 @@ export const FIRING = {
      * still raises this for skeptics who dismiss repeatedly; this is the shipped floor.
      */
     PRE_RUN_CONFIDENCE: 0.8,
-    /**
-     * POST-first-response is a lighter second path: a medium-confidence case where the AI
-     * visibly wandered/overbuilt on a weak spec. Gated below the pre-run floor (pre-run is
-     * primary). This band is [POST_MIN, PRE_RUN_CONFIDENCE). Lowered with the pilot floor.
-     */
-    POST_MIN_CONFIDENCE: 0.45,
 };
 /**
  * Tier-1 prospector suppression band: below this score -> SILENCE, otherwise ESCALATE.
@@ -220,7 +214,7 @@ export function resolveJudgeModel(env = {}) {
     return DEFAULT_JUDGE_MODEL; // empty/unknown → default (no typo can break it).
 }
 /**
- * THE default prompt-coach skill instance. service.ts threads this into the judge so
+ * THE default prompt-coach skill instance. judge.ts threads this into the cascade so
  * the rubric is a single injectable artifact — a test injects a variant (a lower bar,
  * a different phase set) without touching the dispatch code, and a future pilot edits
  * THIS object (or loads it from a data file) to retune without a redeploy.
@@ -236,7 +230,6 @@ export const PROMPT_COACH_SKILL = {
     judgeSystem: JUDGE_SYSTEM,
     prospectorEscalateBand: PROSPECTOR_ESCALATE_BAND,
     preRunConfidence: FIRING.PRE_RUN_CONFIDENCE,
-    postMinConfidence: FIRING.POST_MIN_CONFIDENCE,
     judgeModel: DEFAULT_JUDGE_MODEL,
 };
 /** Render the Haiku prospector input — the latest prompt + a compact recent transcript. */

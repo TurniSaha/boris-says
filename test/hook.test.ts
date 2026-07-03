@@ -121,6 +121,24 @@ describe('runHook — (1) drain (§8.1, §8.2, §7.4 quality-before-habit)', () 
     expect(written.join('')).toContain('QUALITY TIP');
     expect(written.join('')).not.toContain('HABIT NUDGE');
   });
+
+  it('re-queues the un-surfaced tail instead of silently dropping it (single banner/turn, no loss)', () => {
+    const store = createStore(baseDir);
+    // Two tips queued; the drain surfaces only the highest-priority one this turn.
+    store.writeMailbox('sess-1', { kind: 'quality', message: 'QUALITY TIP' });
+    store.writeMailbox('sess-1', { kind: 'habit', message: 'HABIT NUDGE' });
+    const written: string[] = [];
+    const out = { write(c: string): boolean { written.push(c); return true; } } as unknown as NodeJS.WriteStream;
+
+    runHook(baseDeps({ out, spawnFn: recordingSpawn().fn }));
+
+    // One banner this turn (the quality tip); the habit tip was NOT lost — it is back in
+    // the mailbox for the next drain rather than garbage-collected.
+    expect(written.join('')).toContain('QUALITY TIP');
+    expect(written.join('')).not.toContain('HABIT NUDGE');
+    const remaining = store.claimMailbox('sess-1');
+    expect(remaining.map((t) => t.message)).toEqual(['HABIT NUDGE']);
+  });
 });
 
 describe('runHook — (0) synchronous sentinel (the true hello-world health check)', () => {

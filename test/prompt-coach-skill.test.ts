@@ -25,15 +25,12 @@ describe('prompt-coach skill artifact (versioned rubric)', () => {
     expect(PROMPT_COACH_SKILL.judgeSystem.length).toBeGreaterThan(0);
     expect(PROMPT_COACH_SKILL.preRunConfidence).toBeGreaterThan(0);
     expect(PROMPT_COACH_SKILL.preRunConfidence).toBeLessThanOrEqual(1);
-    expect(PROMPT_COACH_SKILL.postMinConfidence).toBeLessThan(PROMPT_COACH_SKILL.preRunConfidence);
   });
 
-  it('exposes the exact BALANCED firing constants (0.8 / 0.45 / 0.35)', () => {
+  it('exposes the exact BALANCED firing constants (0.8 / 0.35)', () => {
     expect(FIRING.PRE_RUN_CONFIDENCE).toBe(0.8);
-    expect(FIRING.POST_MIN_CONFIDENCE).toBe(0.45);
     expect(PROSPECTOR_ESCALATE_BAND).toBe(0.35);
     expect(PROMPT_COACH_SKILL.preRunConfidence).toBe(FIRING.PRE_RUN_CONFIDENCE);
-    expect(PROMPT_COACH_SKILL.postMinConfidence).toBe(FIRING.POST_MIN_CONFIDENCE);
     expect(PROMPT_COACH_SKILL.prospectorEscalateBand).toBe(PROSPECTOR_ESCALATE_BAND);
   });
 

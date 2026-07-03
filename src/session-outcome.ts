@@ -11,8 +11,8 @@
  * report writes NOTHING (no "0 tests passed" default). The reader/extractors are permissive +
  * pure; the strict typed-prompt gate is untouched.
  */
-import { readFileSync } from 'node:fs';
 import { resolveBaseDir, projectKeyForCwd, type ConfigEnv } from './config.js';
+import { readFileCapped } from './jsonl/read-capped.js';
 import { scanToolEvents } from './jsonl/outcome-reader.js';
 import { buildOutcomeReport, renderOutcomeLine } from './brain/outcome-signals.js';
 import { writeLastOutcome } from './brain/outcome-store.js';
@@ -52,13 +52,13 @@ function parseStdin(stdin: string): { sessionId: string; transcriptPath: string;
   };
 }
 
-/** Default transcript reader — never throws (→ '' on any error). */
+/**
+ * Default transcript reader — byte-capped (readFileCapped) like every other transcript /
+ * corpus read, so a pathologically huge session `.jsonl` is skipped rather than read whole
+ * into the detached SessionEnd process. Never throws (→ '' on any error or oversized file).
+ */
 function defaultReadTranscript(path: string): string {
-  try {
-    return readFileSync(path, 'utf8');
-  } catch {
-    return '';
-  }
+  return readFileCapped(path) ?? '';
 }
 
 /**

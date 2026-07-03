@@ -110,10 +110,9 @@ function toPattern(p, status, createdAt) {
 export async function runHabitMiner(input) {
     const { state, backend, store, now } = input;
     const corpus = resolveCorpus(input.corpus);
-    // ── THROTTLE (a): new-event count since the watermark. The watermark is a
-    // monotonic event COUNTER (SPEC §7.2); the corpus reader returns new-since events,
-    // so the count of fresh typed prompts is corpus.length here (the caller feeds a
-    // watermark-filtered corpus) — but we also gate defensively on the persisted count.
+    // ── THROTTLE (a): the caller feeds a watermark-filtered corpus (corpus-reader.ts
+    // returns only prompts with `ts > state.lastMinedWatermark`), so the number of NEW
+    // typed prompts to mine is simply corpus.length here.
     const newEventCount = corpus.length;
     if (newEventCount < MIN_NEW_EVENTS) {
         return noop(state, 'throttle_events');
@@ -175,12 +174,16 @@ export async function runHabitMiner(input) {
     if (drafted.length > 0) {
         store.upsertPatterns(drafted);
     }
-    // Advance the watermark (monotonic counter) + lastMinedAt. The watermark moves
-    // forward by the number of new events consumed this run.
+    // Advance the watermark to the MAX `ts` (epoch-ms) consumed this run + lastMinedAt.
+    // The watermark is a TIMESTAMP, not a count: corpus-reader.ts filters `ts > watermark`,
+    // so the next mine reads only prompts newer than the newest one we just consumed.
+    // Monotonic: never regress below the prior mark (a corpus of only ts=0 / missing-
+    // timestamp prompts must not rewind the watermark and re-admit already-mined history).
+    const maxTsConsumed = corpus.reduce((max, p) => (p.ts > max ? p.ts : max), state.lastMinedWatermark);
     const nextState = {
         ...state,
         lastMinedAt: now,
-        lastMinedWatermark: state.lastMinedWatermark + newEventCount,
+        lastMinedWatermark: maxTsConsumed,
     };
     return { mined: true, skippedReason: null, upserted: drafted, nextState };
 }

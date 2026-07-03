@@ -70,6 +70,10 @@ export async function runStopHook(deps) {
         for (;;) {
             const tips = store.claimMailbox(payload.sessionId);
             if (tips.length > 0) {
+                // Single banner per turn — re-queue the tail so a deferred lower-priority tip is
+                // not silently dropped; it surfaces on the next drain (Stop or UPS backstop).
+                for (const rest of tips.slice(1))
+                    store.writeMailbox(payload.sessionId, rest);
                 emitClaimed(tips[0], turnId, out);
                 return;
             }

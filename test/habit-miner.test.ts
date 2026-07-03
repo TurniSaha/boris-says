@@ -5,7 +5,7 @@
  * on-disk store in a tmp dir.
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../src/habit/miner.js';
 import { createPatternsStore, type Pattern } from '../src/habit/patterns-store.js';
 import { defaultState, type CoachState } from '../src/state/store.js';
-import type { CorpusPrompt } from '../src/jsonl/corpus-reader.js';
+import { readCorpusTypedPrompts, type CorpusPrompt } from '../src/jsonl/corpus-reader.js';
 import type { LlmBackend } from '../src/llm/backend.js';
 
 let baseDir: string;
@@ -105,6 +105,8 @@ describe('throttle (§7.2) — both conditions must hold', () => {
     expect((backend.complete as ReturnType<typeof vi.fn>).mock.calls[0][0].model).toBe('sonnet');
     expect(result.upserted[0].draft).toBeUndefined(); // draft failure never blocks detection
     expect(result.nextState.lastMinedAt).toBe(NOW);
+    // The watermark advances to the MAX `ts` consumed (epoch-ms), NOT an event count —
+    // corpusOf(N) tags prompts ts = 1..N, so the max is N.
     expect(result.nextState.lastMinedWatermark).toBe(MIN_NEW_EVENTS);
     expect(result.upserted).toHaveLength(1);
   });
@@ -563,5 +565,84 @@ describe('corpus reader fn form', () => {
     const reader = () => corpusOf(MIN_NEW_EVENTS);
     const result = await runHabitMiner(baseInput({ corpus: reader }));
     expect(result.mined).toBe(true);
+  });
+});
+
+describe('watermark semantics — epoch-ms, NOT an event count (§7.2 corpus-reader contract)', () => {
+  /** Corpus prompts at explicit epoch-ms timestamps (order/count decoupled from ts). */
+  function corpusAt(tsList: number[], text = 'give me the prompt for the next session'): CorpusPrompt[] {
+    return tsList.map((ts, i) => ({ text, sessionId: `s${i}`, project: 'p', ts }));
+  }
+
+  it('advances the watermark to the MAX ts consumed, not corpus.length', async () => {
+    // 5 prompts (clears MIN_NEW_EVENTS) but big epoch-ms timestamps; max is the last.
+    const corpus = corpusAt([1_700_000_000_001, 1_700_000_000_002, 1_700_000_000_003, 1_700_000_000_004, 1_700_000_000_005]);
+    const result = await runHabitMiner(baseInput({ corpus }));
+    expect(result.mined).toBe(true);
+    // Was `state.lastMinedWatermark + newEventCount` (=5) under the old count bug —
+    // now it is the max ts so the next corpus read actually filters `ts <= watermark`.
+    expect(result.nextState.lastMinedWatermark).toBe(1_700_000_000_005);
+  });
+
+  it('never regresses the watermark when consumed prompts are all older than the prior mark', async () => {
+    // A prior epoch-ms watermark; a corpus of only ts=0 prompts (missing timestamps).
+    const state: CoachState = { ...defaultState(), lastMinedAt: null, lastMinedWatermark: 1_700_000_000_000 };
+    const corpus = corpusAt([0, 0, 0, 0, 0]);
+    const result = await runHabitMiner(baseInput({ state, corpus }));
+    expect(result.mined).toBe(true);
+    expect(result.nextState.lastMinedWatermark).toBe(1_700_000_000_000);
+  });
+});
+
+describe('END-TO-END across the REAL readCorpusTypedPrompts (no injected corpus seam)', () => {
+  let projectsRoot: string;
+  beforeEach(() => {
+    projectsRoot = mkdtempSync(join(tmpdir(), 'coach-miner-corpus-'));
+  });
+  afterEach(() => {
+    rmSync(projectsRoot, { recursive: true, force: true });
+  });
+
+  function writeSession(project: string, file: string, lines: string[]): void {
+    const pdir = join(projectsRoot, project);
+    mkdirSync(pdir, { recursive: true });
+    writeFileSync(join(pdir, file), lines.join('\n'));
+  }
+  function typedLine(text: string, tsIso: string, sessionId: string): string {
+    return JSON.stringify({
+      type: 'user',
+      promptSource: 'typed',
+      timestamp: tsIso,
+      sessionId,
+      message: { role: 'user', content: text },
+    });
+  }
+
+  it('the watermark the miner returns actually filters the NEXT real corpus read to zero', async () => {
+    // Three distinct sessions of the canonical handoff ask, at real ISO timestamps.
+    const t1 = '2026-06-22T00:00:01.000Z';
+    const t2 = '2026-06-22T00:00:02.000Z';
+    const t3 = '2026-06-22T00:00:03.000Z';
+    writeSession('proj', 's1.jsonl', [typedLine('give me the prompt for the next session', t1, 's1')]);
+    writeSession('proj', 's2.jsonl', [typedLine('write the next session prompt handoff', t2, 's2')]);
+    writeSession('proj', 's3.jsonl', [typedLine('prepare the next session handoff prompt', t3, 's3')]);
+    // Two more so the count clears MIN_NEW_EVENTS.
+    writeSession('proj', 's4.jsonl', [typedLine('give me the prompt for the next session', t2, 's4')]);
+    writeSession('proj', 's5.jsonl', [typedLine('give me the prompt for the next session', t3, 's5')]);
+
+    // First mine: read the REAL corpus at the persisted (0) watermark, exactly like judge.ts.
+    const firstCorpus = readCorpusTypedPrompts({ projectsDir: projectsRoot, sinceWatermark: 0 });
+    expect(firstCorpus.length).toBeGreaterThanOrEqual(MIN_NEW_EVENTS);
+    const first = await runHabitMiner(baseInput({ corpus: firstCorpus }));
+    expect(first.mined).toBe(true);
+    expect(first.nextState.lastMinedWatermark).toBe(Date.parse(t3));
+
+    // Second read at the RETURNED watermark: no NEW prompts → the throttle would no-op.
+    // (This is the contract the old count-based watermark silently broke.)
+    const secondCorpus = readCorpusTypedPrompts({
+      projectsDir: projectsRoot,
+      sinceWatermark: first.nextState.lastMinedWatermark,
+    });
+    expect(secondCorpus).toHaveLength(0);
   });
 });

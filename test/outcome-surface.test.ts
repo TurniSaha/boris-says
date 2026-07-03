@@ -3,9 +3,10 @@
  * SessionStart surfacing, plus the consume-once + idempotency contract of outcome-store.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MAX_JSONL_BYTES } from '../src/jsonl/read-capped.js';
 import {
   writeLastOutcome,
   readPendingOutcome,
@@ -117,6 +118,29 @@ describe('W2-OUTCOME — runSessionOutcome (SessionEnd)', () => {
     expect(typeof onDisk.projectKey).toBe('string');
     expect(onDisk.projectKey.length).toBeGreaterThan(0);
     expect(onDisk.projectKey.endsWith('/')).toBe(false);
+  });
+
+  it('the DEFAULT transcript reader is byte-capped: a >32MiB session .jsonl is skipped (no OOM), writes nothing', () => {
+    // Finish the 32MiB-read-cap hardening: the SessionEnd default reader must go through
+    // readFileCapped like every other transcript/corpus read, so a pathologically huge
+    // session file is skipped rather than read whole into the detached process.
+    const huge = join(baseDir, 'huge-transcript.jsonl');
+    // A genuine test-pass signal at the TOP (paired tool_use + tool_result). If the reader
+    // were UNCAPPED it would read the whole file, find this, and WRITE a "53 tests passed"
+    // line; the cap must skip the oversized file so NOTHING is written.
+    const head =
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] } }) + '\n' +
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1' }] }, toolUseResult: { stdout: '      Tests  53 passed (53)', stderr: '', interrupted: false } }) + '\n';
+    // Pad with blank lines (skipped by the scanner) until the file exceeds the cap.
+    const filler = '\n'.repeat(MAX_JSONL_BYTES + 1 - head.length);
+    writeFileSync(huge, head + filler);
+    // No injected readTranscript → exercises the real defaultReadTranscript.
+    runSessionOutcome({
+      stdin: JSON.stringify({ session_id: 'sess-A', transcript_path: huge, cwd: '/Users/x/ProjA/' }),
+      env: { PROMPT_COACH_DIR: baseDir },
+      now: () => 5000,
+    });
+    expect(existsSync(join(baseDir, 'last-outcome.json'))).toBe(false);
   });
 
   it('writes NOTHING when there is no measured signal (honesty: no fabricated line)', () => {

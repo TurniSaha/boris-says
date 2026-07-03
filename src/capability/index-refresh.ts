@@ -199,8 +199,19 @@ async function defaultFetchText(url: string): Promise<string> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: { 'user-agent': 'boris-says' },
+    // A redirect off our two hardcoded HTTPS hosts is a compromise/hijack signal — refuse
+    // it outright rather than silently follow it to an attacker-chosen origin.
+    redirect: 'error',
   });
   if (!res.ok) throw new Error(`GET ${url}: ${res.status}`);
+  // Pre-buffer size guard: reject on the advertised Content-Length BEFORE reading the body,
+  // so a hostile (or compromised-host) multi-GB response never balloons this background
+  // process's memory. res.text() still enforces the post-read cap as a backstop for a
+  // missing/lying Content-Length.
+  const advertised = Number(res.headers.get('content-length'));
+  if (Number.isFinite(advertised) && advertised > MAX_RESPONSE_BYTES) {
+    throw new Error(`GET ${url}: response too large (${advertised} bytes advertised)`);
+  }
   const text = await res.text();
   if (text.length > MAX_RESPONSE_BYTES) throw new Error(`GET ${url}: response too large`);
   return text;

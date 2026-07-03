@@ -220,12 +220,6 @@ export const FIRING = {
    * still raises this for skeptics who dismiss repeatedly; this is the shipped floor.
    */
   PRE_RUN_CONFIDENCE: 0.8,
-  /**
-   * POST-first-response is a lighter second path: a medium-confidence case where the AI
-   * visibly wandered/overbuilt on a weak spec. Gated below the pre-run floor (pre-run is
-   * primary). This band is [POST_MIN, PRE_RUN_CONFIDENCE). Lowered with the pilot floor.
-   */
-  POST_MIN_CONFIDENCE: 0.45,
 } as const;
 
 /**
@@ -265,13 +259,12 @@ export interface PromptCoachSkill {
   readonly judgeSystem: string;
   readonly prospectorEscalateBand: number;
   readonly preRunConfidence: number;
-  readonly postMinConfidence: number;
   /** The model the JUDGE/advice-composer tier runs on (default opus; env-overridable). */
   readonly judgeModel: JudgeModel;
 }
 
 /**
- * THE default prompt-coach skill instance. service.ts threads this into the judge so
+ * THE default prompt-coach skill instance. judge.ts threads this into the cascade so
  * the rubric is a single injectable artifact — a test injects a variant (a lower bar,
  * a different phase set) without touching the dispatch code, and a future pilot edits
  * THIS object (or loads it from a data file) to retune without a redeploy.
@@ -287,7 +280,6 @@ export const PROMPT_COACH_SKILL: PromptCoachSkill = {
   judgeSystem: JUDGE_SYSTEM,
   prospectorEscalateBand: PROSPECTOR_ESCALATE_BAND,
   preRunConfidence: FIRING.PRE_RUN_CONFIDENCE,
-  postMinConfidence: FIRING.POST_MIN_CONFIDENCE,
   judgeModel: DEFAULT_JUDGE_MODEL,
 };
 

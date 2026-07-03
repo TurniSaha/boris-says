@@ -39,7 +39,7 @@ npm run gate       # = npm run build && vitest run
 | `src/` | the plugin source (TypeScript, ESM, strict, zero runtime deps) |
 | `dist/` | the committed compiled output the installed plugin runs |
 | `test/` | vitest unit/contract tests (mock the LLM + filesystem seams) |
-| `hooks/hooks.json` | the `UserPromptSubmit` hook wiring (anchored to `CLAUDE_PLUGIN_ROOT`) |
+| `hooks/hooks.json` | the hook wiring for all three events — `UserPromptSubmit`, `Stop`, `SessionEnd` (each anchored to `CLAUDE_PLUGIN_ROOT`) |
 | `commands/` | the `/coach` slash command |
 | `.claude-plugin/` | `plugin.json` + `marketplace.json` (install manifests) |
 | `docs/` | `SPEC.md` (design) and supporting notes |
@@ -57,6 +57,10 @@ so nothing reads as an undefined magic token:
 | `F-…`, `L01`/`L34b`/… | Individual coaching-lever IDs (a "lever" is one thing the coach can nudge about). |
 | `GOAL.md` | The private product-goals doc the design was driven from. It is **not public**; the invariants those comments cite (e.g. the prompt-intent relevance gate) are specified in [`docs/SPEC.md`](docs/SPEC.md). |
 | `SPEC §N` | A section of [`docs/SPEC.md`](docs/SPEC.md). |
+| `PLAN §…`, `item N` | The private build/implementation plan the milestones were executed from (dev-repo only; not shipped public). The behavior each such comment describes is exercised by a test — read the test, not the plan. |
+| `[A2]` | The same-turn Stop-hook drain design point: a well-formed turn writes a "judge-done" marker so the Stop poll can exit instantly instead of waiting out the drain cap (see `stop-hook.ts` / `judge.ts`). |
+| `D1`–`D5` | Sub-steps of the M3 habit-draft path (draft eligibility, groundedness, per-mine cap, …) in `habit/miner.ts` / `habit/draft.ts`. |
+| `Codex blocker #…` | A historical note from the build (an issue an assisting agent flagged, since resolved) — context only, nothing to action. |
 
 ## Conventions
 

@@ -2,7 +2,7 @@
  * outcome-store.ts — W2-OUTCOME (Phase 1): the crash-safe GLOBAL handoff file that carries a
  * just-ended session's Outcome line to the NEXT session's first prompt.
  *
- * Design (docs/DESIGN-outcome-scoring.md §4):
+ * Design (the outcome-scoring handoff; SPEC §5.2):
  *  - Surface a GLOBAL `last-outcome.json` (NOT keyed by the ended session id — the next
  *    session has a different id, so a per-ended-id surface would never be read). The COMPUTE
  *    CACHE is keyed by the ended session id for IDEMPOTENCY (a compact-then-exit double-fire

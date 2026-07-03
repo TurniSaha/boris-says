@@ -6,6 +6,11 @@
  *   (b) now - state.lastMinedAt >= MINE_COOLDOWN_MS (24h).
  * Most calls hit the throttle and return a no-op result with ZERO LLM call.
  *
+ * WATERMARK UNIT: `lastMinedWatermark` is an EPOCH-MS TIMESTAMP (the max `ts` consumed
+ * on the last mine), NOT an event count — corpus-reader.ts filters `ts > watermark`, so
+ * a mine advances the mark to the newest prompt it consumed and the next mine reads only
+ * strictly-newer prompts. It is monotonic (never regresses).
+ *
  * LLM PASS (one Sonnet call): the source-spec miner system prompt + the §5.5.6
  * desirability instruction (only INEFFICIENT/COUNTERPRODUCTIVE habits; a recurring
  * BEST PRACTICE emits nothing; every pattern requires `why_inefficient`; 3-6
@@ -179,10 +184,9 @@ export async function runHabitMiner(input: MinerInput): Promise<MinerResult> {
 
   const corpus = resolveCorpus(input.corpus);
 
-  // ── THROTTLE (a): new-event count since the watermark. The watermark is a
-  // monotonic event COUNTER (SPEC §7.2); the corpus reader returns new-since events,
-  // so the count of fresh typed prompts is corpus.length here (the caller feeds a
-  // watermark-filtered corpus) — but we also gate defensively on the persisted count.
+  // ── THROTTLE (a): the caller feeds a watermark-filtered corpus (corpus-reader.ts
+  // returns only prompts with `ts > state.lastMinedWatermark`), so the number of NEW
+  // typed prompts to mine is simply corpus.length here.
   const newEventCount = corpus.length;
   if (newEventCount < MIN_NEW_EVENTS) {
     return noop(state, 'throttle_events');
@@ -259,12 +263,16 @@ export async function runHabitMiner(input: MinerInput): Promise<MinerResult> {
     store.upsertPatterns(drafted);
   }
 
-  // Advance the watermark (monotonic counter) + lastMinedAt. The watermark moves
-  // forward by the number of new events consumed this run.
+  // Advance the watermark to the MAX `ts` (epoch-ms) consumed this run + lastMinedAt.
+  // The watermark is a TIMESTAMP, not a count: corpus-reader.ts filters `ts > watermark`,
+  // so the next mine reads only prompts newer than the newest one we just consumed.
+  // Monotonic: never regress below the prior mark (a corpus of only ts=0 / missing-
+  // timestamp prompts must not rewind the watermark and re-admit already-mined history).
+  const maxTsConsumed = corpus.reduce((max, p) => (p.ts > max ? p.ts : max), state.lastMinedWatermark);
   const nextState: CoachState = {
     ...state,
     lastMinedAt: now,
-    lastMinedWatermark: state.lastMinedWatermark + newEventCount,
+    lastMinedWatermark: maxTsConsumed,
   };
 
   return { mined: true, skippedReason: null, upserted: drafted, nextState };

@@ -5,8 +5,7 @@ import { posix, win32 } from 'node:path';
 import { cwd as processCwd } from 'node:process';
 
 /**
- * Capability-awareness — the installed-COMMANDS probe (ported from
- * upstream-extension/src/installed-commands-scan.ts, §0.1 row 10).
+ * Capability-awareness — the installed-COMMANDS probe (SPEC §0.1 row 10).
  *
  * Sibling of scan-skills.ts. Where the skills probe scans skill DIRECTORIES (each
  * with a SKILL.md), this scans flat `.md` command FILES inside the dev's on-disk

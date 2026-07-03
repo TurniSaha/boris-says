@@ -133,8 +133,9 @@ If the judge finishes after the turn ends, the same banner arrives on your next 
 > prompts (feature 4 above) — run `/coach status` to see what the coach is withholding while it watches.
 > Opportunity tips (skill/capability suggestions) fire from day one.
 
-**Liveness check:** type `when life gives you lemons` any time → it replies `make lemonade! 🍋` on the
-same turn, confirming the hook is wired.
+**Liveness check:** type `when life gives you lemons` any time the coach is on → it replies
+`make lemonade! 🍋` on the same turn, confirming the hook is wired. (While `/coach off` is set the
+kill switch silences everything, including this check.)
 
 ## How it works (no server)
 
@@ -182,8 +183,17 @@ quality signal is the live 👍/👎 loop, not a published precision number. The
 
 ## Privacy
 
-Everything stays on your machine. The only network calls are the LLM judge calls (to Anthropic, via your
-own auth) — no server, no telemetry, ever.
+Everything stays on your machine. There is **no boris-says server and no telemetry, ever** — no usage
+data, identifiers, or prompt text is ever sent to us or any third party. Boris makes exactly two kinds
+of outbound network calls, both to trusted first-party hosts and neither carrying any of your data:
+
+1. the **LLM judge calls** (to Anthropic, over your own `claude` CLI auth — described below); and
+2. a **background skill-index refresh** at most **once every 7 days**: two anonymous `GET` requests to
+   `api.github.com` and `raw.githubusercontent.com` to freshen the public capability catalog `/coach find`
+   searches. These carry a static `boris-says` user-agent and **no prompt text, no identifiers, nothing
+   about you** — just the two fixed public URLs. It is fail-silent (any error leaves the shipped index
+   untouched) and fully opt-out: set `PROMPT_COACH_NO_INDEX_REFRESH=1` in your environment to disable it,
+   and Boris then only ever uses the static index committed to this repo.
 
 **Exactly what leaves your machine per judge call** (and nothing else):
 
@@ -198,10 +208,24 @@ The judge payload is passed to the `claude` CLI over **stdin**, not on the comma
 never visible to other local processes via `ps`. The **habit miner** reads your all-project session
 history **locally only** — it never leaves your machine and is never part of a judge call.
 
-The external-skill index is a static file committed to this repo, scraped from public Anthropic +
-community repos at build time; `/coach find` and the matcher never phone home, and nothing is ever
+The external-skill index ships as a static file committed to this repo (scraped from public Anthropic +
+community repos at build time). `/coach find` and the matcher read that local file and **never phone home**;
+the only refresh traffic is the throttled, opt-out GitHub call described above, and nothing is ever
 installed without you running the command yourself. State lives in plain JSON under
-`~/.claude/prompt-coach/`. Delete that directory to reset.
+`~/.claude/prompt-coach/`. Delete that directory to reset (see **Uninstall** below).
+
+## Uninstall
+
+Removing the plugin does not delete your local state. To fully remove Boris:
+
+```
+/plugin uninstall boris-says      # stop the hooks
+rm -rf ~/.claude/prompt-coach      # delete all local state (see below)
+```
+
+That state directory holds your rated taste examples and coach state — including **verbatim prompt text**
+you typed (feedback anchors, pending/withheld tips). It never left your machine, but `/plugin uninstall`
+alone leaves it on disk, so delete it if you want a clean removal.
 
 ## Contributing
 

@@ -4,7 +4,7 @@
  * touching the strict typed-prompt gate (`line-parser.ts`/`session-reader.ts` stay strict —
  * they are load-bearing for the live per-prompt judge).
  *
- * Design + honesty rules: docs/DESIGN-outcome-scoring.md. The hard ones encoded here:
+ * Design + honesty rules: the outcome-scoring design (SPEC §5.2). The hard ones encoded here:
  *  - Every signal carries PROVENANCE; a missing signal is "not measured", NEVER 0 / pass.
  *  - tests-passed emits ONLY when a WHITELISTED runner's own summary grammar is present in a
  *    PAIRED tool-result (unrecognized runners, `curl`/prose "passed" → no signal — the
