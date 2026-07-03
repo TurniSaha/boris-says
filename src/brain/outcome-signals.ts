@@ -46,6 +46,13 @@ export interface ChangeSizeSignal {
   readonly added: number;
   readonly removed: number;
   readonly filesChanged: number;
+  /**
+   * FACTS tweak (b): true iff EVERY changed file is docs/config (never a source file). A
+   * docs-only session (e.g. editing a README) drops the honest "no test run detected" clause
+   * — you don't run a suite to touch a Markdown file. ANY source file present → false (keep
+   * the honest clause). NO_CHANGE / no files → false (fail-safe).
+   */
+  readonly docsOnly: boolean;
 }
 
 /** The whole-session Outcome report — honest per-signal, NO combined score. */
@@ -86,7 +93,31 @@ const NO_TEST: TestSignal = {
   source: null,
 };
 const NO_COMMIT: CommitSignal = { provenance: 'no-signal', committed: false, sha: null };
-const NO_CHANGE: ChangeSizeSignal = { provenance: 'no-signal', added: 0, removed: 0, filesChanged: 0 };
+const NO_CHANGE: ChangeSizeSignal = { provenance: 'no-signal', added: 0, removed: 0, filesChanged: 0, docsOnly: false };
+
+/**
+ * FACTS tweak (b): docs/config file extensions (lowercased, incl. leading dot). A file whose
+ * basename is a dotfile, or is LICENSE / NOTICE, or ends in one of these is "docs/config".
+ * Anything else — including any code extension (.ts .js .py .go .rs .java …) or an unknown /
+ * extensionless file (e.g. Makefile) — is NOT docs-only, so the honest test clause is kept.
+ */
+const DOCS_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.md', '.markdown', '.txt', '.rst', '.json', '.yaml', '.yml', '.toml',
+  '.ini', '.cfg', '.lock', '.csv', '.html', '.css',
+]);
+const DOCS_BASENAMES: ReadonlySet<string> = new Set(['license', 'notice']);
+
+/** True iff this single path is a docs/config file (dotfile / LICENSE / NOTICE / docs ext). */
+function isDocsPath(path: string): boolean {
+  // Basename is the last path segment (handles both / and \ separators, trailing text only).
+  const base = path.split(/[\\/]/).pop() ?? path;
+  if (base.length === 0) return false;
+  if (base.startsWith('.')) return true; // a dotfile (.gitignore, .eslintrc, …).
+  if (DOCS_BASENAMES.has(base.toLowerCase())) return true; // LICENSE / NOTICE (any case).
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0) return false; // no extension (Makefile) → NOT docs-only (fail-safe).
+  return DOCS_EXTENSIONS.has(base.slice(dot).toLowerCase());
+}
 
 /**
  * The runner allowlist. Each entry: a `detect` (does this output belong to this runner?) and
@@ -262,7 +293,9 @@ export function changeSizeSignal(events: readonly ToolEvent[]): ChangeSizeSignal
     }
   }
   if (!any) return NO_CHANGE;
-  return { provenance: 'measured', added, removed, filesChanged: files.size };
+  // FACTS tweak (b): docs-only iff there IS at least one file and EVERY file is docs/config.
+  const docsOnly = files.size > 0 && [...files].every(isDocsPath);
+  return { provenance: 'measured', added, removed, filesChanged: files.size, docsOnly };
 }
 
 /** Compose the whole-session report from the scanned events. Pure. */
@@ -290,8 +323,8 @@ function testCountUnit(runner: string | null, count: number): string {
  * fabricate a "0 tests passed" or a passing default). Each clause is verbatim-from-disk or a
  * labeled proxy, joined with ", " — and the "no test run detected" clause TAILS the line
  * (item 6), it never leads. NO score. Examples:
- *   "Last session: 422 tests passed, 96% coverage, 3 files changed (+120/-40), committed."
- *   "Last session: 2 files changed (+8/-3), no test run detected."
+ *   "Last time here: 422 tests passed, 96% coverage, 3 files changed (+120/-40), committed."
+ *   "Last time here: 2 files changed (+8/-3), no test run detected."
  */
 export function renderOutcomeLine(report: OutcomeReport): string {
   const parts: string[] = [];
@@ -325,8 +358,10 @@ export function renderOutcomeLine(report: OutcomeReport): string {
     parts.push(report.commit.sha !== null ? `committed (${report.commit.sha})` : 'committed');
   }
 
-  // item 6: the "no test run detected" clause tails the line (never leads it).
-  if (noTestRun) parts.push('no test run detected');
+  // item 6: the "no test run detected" clause tails the line (never leads it). FACTS tweak
+  // (b): DROP it for a docs/config-only session — you don't run a suite to edit a README, so
+  // the honest clause would only read as noise. A session touching ANY source file keeps it.
+  if (noTestRun && !report.changeSize.docsOnly) parts.push('no test run detected');
 
   // Nothing measured at all → '' so the caller surfaces nothing (no fabricated line).
   const everythingEmpty =
@@ -335,7 +370,7 @@ export function renderOutcomeLine(report: OutcomeReport): string {
     report.changeSize.provenance === 'no-signal';
   if (everythingEmpty) return '';
 
-  const line = `Last session: ${parts.join(', ')}.`;
+  const line = `Last time here: ${parts.join(', ')}.`;
 
   // The DEMOTED L34b: append ONE retrospective prune clause when the ended session's own
   // agent edits were large AND uncommitted (see the PRUNE_RECAP_* doc). "That change" is

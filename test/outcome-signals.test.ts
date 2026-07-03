@@ -261,10 +261,82 @@ describe('W2-OUTCOME — renderOutcomeLine', () => {
   it('"no test run detected" is at the END of the line, not the LEAD', () => {
     // With edits present, the change clause leads; the no-test clause tails.
     const line = renderOutcomeLine(buildOutcomeReport(scanToolEvents(editPair('/a.ts', [{ lines: ['+a'] }]))));
-    // Strip the "Last session: " prefix; the FIRST clause must NOT be the no-test one.
-    const body = line.replace(/^Last session:\s*/, '');
+    // Strip the "Last time here: " prefix; the FIRST clause must NOT be the no-test one.
+    const body = line.replace(/^Last time here:\s*/, '');
     expect(body.startsWith('no test run detected')).toBe(false);
     expect(line).toMatch(/no test run detected\.?$/); // it ends the line.
+  });
+});
+
+// ── FACTS tweak (a)+(b): reworded lead + docs-only drops the honest no-test clause ─
+//
+// (a) The recap lead is "Last time here:" (was "Last session:").
+// (b) A session whose changed files are ALL docs/config (.md/.json/…) drops the honest
+//     "no test run detected" clause — you don't run a test suite to edit a README. A
+//     session touching ANY source file (.ts/.js/.py/…) KEEPS the honest clause.
+
+describe('FACTS — reworded lead "Last time here:"', () => {
+  it('renders the reworded lead (not the old "Last session:")', () => {
+    const line = renderOutcomeLine(reportWith({ added: 40, filesChanged: 2 }));
+    expect(line.startsWith('Last time here:')).toBe(true);
+    expect(line).not.toContain('Last session:');
+  });
+});
+
+describe('FACTS — changeSizeSignal.docsOnly classification', () => {
+  it('a docs/config-only session (only .md/.json changed) is docsOnly=true', () => {
+    const jsonl = [editPair('/proj/README.md', [{ lines: ['+a'] }]), editPair('/proj/pkg.json', [{ lines: ['+b'] }])].join('\n');
+    expect(changeSizeSignal(scanToolEvents(jsonl)).docsOnly).toBe(true);
+  });
+
+  it('any source file (.ts) present → docsOnly=false', () => {
+    const jsonl = [editPair('/proj/README.md', [{ lines: ['+a'] }]), editPair('/proj/index.ts', [{ lines: ['+b'] }])].join('\n');
+    expect(changeSizeSignal(scanToolEvents(jsonl)).docsOnly).toBe(false);
+  });
+
+  it('a dotfile / LICENSE / NOTICE counts as docs-only', () => {
+    const jsonl = [editPair('/proj/.gitignore', [{ lines: ['+a'] }]), editPair('/proj/LICENSE', [{ lines: ['+b'] }])].join('\n');
+    expect(changeSizeSignal(scanToolEvents(jsonl)).docsOnly).toBe(true);
+  });
+
+  it('an unknown / no-extension file is NOT docs-only (fail-safe keeps the honest clause)', () => {
+    const jsonl = editPair('/proj/Makefile', [{ lines: ['+a'] }]);
+    expect(changeSizeSignal(scanToolEvents(jsonl)).docsOnly).toBe(false);
+  });
+
+  it('no changes → docsOnly=false (NO_CHANGE default)', () => {
+    expect(changeSizeSignal(scanToolEvents(bashPair('ls', { stdout: 'x' }))).docsOnly).toBe(false);
+  });
+});
+
+describe('FACTS — docs-only session drops "no test run detected"; source-touching keeps it', () => {
+  it('docs-only (only .md changed) OMITS the honest no-test clause', () => {
+    const jsonl = editPair('/proj/README.md', [{ lines: ['+a'] }]);
+    const line = renderOutcomeLine(buildOutcomeReport(scanToolEvents(jsonl)));
+    expect(line).not.toContain('no test run detected');
+    expect(line).toContain('1 file changed'); // the factual change clause still renders.
+  });
+
+  it('a .ts-touching session KEEPS the honest no-test clause', () => {
+    const jsonl = editPair('/proj/index.ts', [{ lines: ['+a'] }]);
+    const line = renderOutcomeLine(buildOutcomeReport(scanToolEvents(jsonl)));
+    expect(line).toContain('no test run detected');
+  });
+
+  it('MIXED (docs + source) KEEPS the honest clause (any source → not docs-only)', () => {
+    const jsonl = [editPair('/proj/README.md', [{ lines: ['+a'] }]), editPair('/proj/index.ts', [{ lines: ['+b'] }])].join('\n');
+    const line = renderOutcomeLine(buildOutcomeReport(scanToolEvents(jsonl)));
+    expect(line).toContain('no test run detected');
+  });
+
+  it('a docs-only session that DID run tests still shows the pass count (docsOnly only gates the no-test clause)', () => {
+    const jsonl = [
+      bashPair('npm test', { stdout: 'Tests  3 passed (3)', stderr: '', interrupted: false }),
+      editPair('/proj/README.md', [{ lines: ['+a'] }]),
+    ].join('\n');
+    const line = renderOutcomeLine(buildOutcomeReport(scanToolEvents(jsonl)));
+    expect(line).toContain('3 tests passed');
+    expect(line).not.toContain('no test run detected'); // a run WAS detected anyway.
   });
 });
 
@@ -282,6 +354,7 @@ function reportWith(over: {
   filesChanged?: number;
   committed?: boolean;
   changeMeasured?: boolean;
+  docsOnly?: boolean;
 }): OutcomeReport {
   const changeMeasured = over.changeMeasured ?? true;
   return {
@@ -291,8 +364,8 @@ function reportWith(over: {
         ? { provenance: 'measured', committed: true, sha: 'abc1234' }
         : { provenance: 'no-signal', committed: false, sha: null },
     changeSize: changeMeasured
-      ? { provenance: 'measured', added: over.added ?? 0, removed: 0, filesChanged: over.filesChanged ?? 0 }
-      : { provenance: 'no-signal', added: 0, removed: 0, filesChanged: 0 },
+      ? { provenance: 'measured', added: over.added ?? 0, removed: 0, filesChanged: over.filesChanged ?? 0, docsOnly: over.docsOnly ?? false }
+      : { provenance: 'no-signal', added: 0, removed: 0, filesChanged: 0, docsOnly: false },
   };
 }
 

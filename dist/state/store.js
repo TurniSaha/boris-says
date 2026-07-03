@@ -61,6 +61,7 @@ export function defaultState() {
         greetedSessions: [],
         tourShown: false,
         outcomeRecapShownSessions: [],
+        livenessShownSessions: [],
         judgedTurns: [],
         lastIndexRefreshAt: null,
         watch: null,
@@ -333,6 +334,17 @@ export function createStore(baseDir = DEFAULT_BASE_DIR) {
         saveState({ ...s, outcomeRecapShownSessions: next });
         return true;
     }
+    function markLivenessShownIfFirst(sessionId) {
+        if (!sessionId)
+            return false; // no id → never fire (avoid a blank-key loop).
+        const s = getState();
+        const seen = s.livenessShownSessions ?? [];
+        if (seen.includes(sessionId))
+            return false;
+        const next = [...seen, sessionId].slice(-500);
+        saveState({ ...s, livenessShownSessions: next });
+        return true;
+    }
     function floorDeltaForLever(lever) {
         return adaptiveFloorDelta(getState().feedbackByLever[lever]);
     }
@@ -416,6 +428,7 @@ export function createStore(baseDir = DEFAULT_BASE_DIR) {
         markGreetedIfFirst,
         markTourShownIfFirst,
         markOutcomeRecapShownIfFirst,
+        markLivenessShownIfFirst,
         observeWatch,
         recordWithheldTip,
         markAnnouncedIfFirst,

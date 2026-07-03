@@ -61,11 +61,24 @@ export function runHook(deps) {
         // Outcome line, show it ONCE on this session's first prompt (same-project + first-prompt +
         // consume-once — fixes the cross-project leak). M2: the SHARED gated helper, called by
         // both this hook and the Stop hook so the gates can never diverge. Additive, before the
-        // drain so it never competes with a fresh coaching tip for the budget.
-        surfaceOutcomeRecap(store, baseDir, sessionId, projectKeyForCwd(payload.cwd), deps.out);
+        // drain so it never competes with a fresh coaching tip for the budget. Returns whether a
+        // recap banner (which already carries the Boris title) actually surfaced.
+        const recapSurfaced = surfaceOutcomeRecap(store, baseDir, sessionId, projectKeyForCwd(payload.cwd), deps.out);
         // (1) DRAIN — print the oldest-eligible waiting tip (quality before habit; the store
         // orders the returned array). We surface a single banner per turn; clearing is atomic.
-        drain(store, sessionId, deps.out);
+        const drained = drain(store, sessionId, deps.out);
+        // (1b) TIER 1 LIVENESS HEARTBEAT — a single title-only banner ("I'm in your corner!") on
+        // this session's FIRST prompt: a cheap, deterministic proof the plugin loaded (no LLM, no
+        // mailbox). ADDITIVE by construction — this synchronous hook path never calls markQualityTip,
+        // so it arms no cooldown and suppresses no real tip. It is emitted ONLY when nothing else
+        // surfaced this turn: EVERY coach banner (a recap or a drained tip) already carries the
+        // Boris title, which IS the heartbeat — so on those turns the liveness signal is already
+        // present and a second banner would only double the title (and Claude Code expects ONE
+        // systemMessage JSON per hook). Gated on its OWN per-session flag so none of
+        // greet/recap/liveness consume another's first-prompt gate.
+        if (!recapSurfaced && !drained && store.markLivenessShownIfFirst(sessionId)) {
+            emitTip(formatCoachBanner(''), deps.out ?? process.stdout);
+        }
         // (2) DETACH — hand the payload to the judge via a per-invocation inbox file, then
         // spawn the detached judge and unref so the hook can exit immediately.
         detach(store, payload, deps);
@@ -105,7 +118,7 @@ function parseStdin(stdin) {
 function drain(store, sessionId, out) {
     const tips = store.claimMailbox(sessionId);
     if (tips.length === 0)
-        return;
+        return false;
     // Quality-before-habit ordering is the store's job; print the highest-priority tip.
     const tip = tips[0];
     // Single banner per turn (deliberate) — but re-queue the tail so a lower-priority tip
@@ -116,6 +129,7 @@ function drain(store, sessionId, out) {
         ? withPromptAttribution(tip.message, tip.prompt)
         : tip.message; // no judged prompt (bare ping/sentinel) → nothing to attribute.
     emitTip(message, out ?? process.stdout);
+    return true;
 }
 /**
  * Write the inbox file + spawn the detached judge anchored at the resolved judge path.

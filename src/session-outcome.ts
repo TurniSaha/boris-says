@@ -15,7 +15,9 @@ import { resolveBaseDir, projectKeyForCwd, type ConfigEnv } from './config.js';
 import { readFileCapped } from './jsonl/read-capped.js';
 import { scanToolEvents } from './jsonl/outcome-reader.js';
 import { buildOutcomeReport, renderOutcomeLine } from './brain/outcome-signals.js';
-import { writeLastOutcome } from './brain/outcome-store.js';
+import { writeLastOutcome, patchLastOutcomeSummary } from './brain/outcome-store.js';
+import { createLlmBackend, type LlmBackend } from './llm/backend.js';
+import { generateSessionSummary } from './brain/session-summary.js';
 
 /** The raw SessionEnd stdin payload (extra fields tolerated). */
 interface SessionEndStdin {
@@ -25,13 +27,21 @@ interface SessionEndStdin {
   reason?: string;
 }
 
-/** Injected deps so a test drives it with no real stdin / fs / clock. */
+/** Injected deps so a test drives it with no real stdin / fs / clock / LLM. */
 export interface SessionOutcomeDeps {
   readonly stdin: string;
   readonly env: ConfigEnv;
   /** Read the ended session's JSONL (defaults to fs.readFileSync; '' on any error). */
   readonly readTranscript?: (path: string) => string;
   readonly now?: () => number;
+  /**
+   * TIER 3: the LLM backend for the "what it was about" summary. Injected so tests never spawn
+   * (a stub backend). Real `main()` builds the SAME selector the judge uses. Omitted → no
+   * summary (facts still written).
+   */
+  readonly backend?: LlmBackend;
+  /** TIER 3: hard timeout (ms) for the summary call so a hung `claude -p` can't wedge SessionEnd. */
+  readonly summaryTimeoutMs?: number;
 }
 
 /** Parse + validate the SessionEnd stdin, or null. */
@@ -55,17 +65,24 @@ function parseStdin(stdin: string): { sessionId: string; transcriptPath: string;
 /**
  * Default transcript reader — byte-capped (readFileCapped) like every other transcript /
  * corpus read, so a pathologically huge session `.jsonl` is skipped rather than read whole
- * into the detached SessionEnd process. Never throws (→ '' on any error or oversized file).
+ * in the foreground SessionEnd hook (after the facts are already durable). Never throws (→ '' on any error or oversized file).
  */
 function defaultReadTranscript(path: string): string {
   return readFileCapped(path) ?? '';
 }
 
 /**
- * Run the SessionEnd body. NEVER throws. Writes the global outcome file when there is at
- * least one measured signal; otherwise writes nothing (no fabricated line).
+ * Run the SessionEnd body. NEVER throws / rejects. Writes the global outcome file when there
+ * is at least one measured signal; otherwise writes nothing (no fabricated line).
+ *
+ * FACTS-FIRST ordering (user-safety): the deterministic facts are written IMMEDIATELY, before any
+ * LLM work — so a slow or hung summary call can never delay or lose the facts. TIER 3: when a
+ * backend is injected, ONE bounded, fail-silent `claude -p` call then distills "what was this
+ * session about" and PATCHES it onto the already-written record. When no backend is injected (tests
+ * / no auth) no `await` runs at all, so an unawaited caller still observes the facts synchronously.
+ * Any summary failure / timeout / empty / oversized → no summary field, facts stand (graceful degrade).
  */
-export function runSessionOutcome(deps: SessionOutcomeDeps): void {
+export async function runSessionOutcome(deps: SessionOutcomeDeps): Promise<void> {
   try {
     const parsed = parseStdin(deps.stdin);
     if (parsed === null) return;
@@ -80,13 +97,29 @@ export function runSessionOutcome(deps: SessionOutcomeDeps): void {
 
     const baseDir = resolveBaseDir(deps.env);
     const now = deps.now ?? Date.now;
+    const projectKey = projectKeyForCwd(parsed.cwd);
+
+    // FACTS FIRST (no LLM, instant): write the deterministic recap NOW so a slow/hung summary
+    // call can never delay or lose the facts. SessionEnd's user-visible contract is honored
+    // even if the summary below times out or the hook is killed.
     writeLastOutcome(baseDir, {
       line,
       endedSessionId: parsed.sessionId,
-      projectKey: projectKeyForCwd(parsed.cwd), // scope the recap to this project (cross-project leak fix).
+      projectKey, // scope the recap to this project (cross-project leak fix).
       consumed: false,
       at: now(),
     });
+
+    // TIER 3 (best-effort, bounded, fail-silent): distill the "what it was about" summary and
+    // PATCH it onto the just-written record. This is the ONLY slow step; it runs AFTER the facts
+    // are durable, so the worst case is "facts without a summary line", never lost facts. When no
+    // backend is injected (tests / no auth) this is skipped entirely and the write above stands.
+    if (deps.backend !== undefined) {
+      const summary = await generateSessionSummary(deps.backend, jsonl, deps.summaryTimeoutMs);
+      if (summary !== undefined && summary.length > 0) {
+        patchLastOutcomeSummary(baseDir, parsed.sessionId, projectKey, summary);
+      }
+    }
   } catch {
     // SessionEnd must never throw — a failure just means no line next session.
   }
@@ -110,7 +143,10 @@ async function main(): Promise<void> {
   } catch {
     stdin = '';
   }
-  runSessionOutcome({ stdin, env: process.env });
+  // Build the SAME backend selector the judge uses (CLI default) so the summary call is a real
+  // `claude -p` in production; it is bounded + fail-silent inside generateSessionSummary.
+  const backend = createLlmBackend(process.env);
+  await runSessionOutcome({ stdin, env: process.env, backend });
   process.exit(0);
 }
 

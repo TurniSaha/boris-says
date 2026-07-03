@@ -58,6 +58,25 @@ export function readPendingOutcome(baseDir, currentSessionId, currentProjectKey)
         return null;
     return rec;
 }
+/**
+ * Patch the "what it was about" summary onto the just-written record (TIER 3). The facts are
+ * written first + instantly by writeLastOutcome; this best-effort add-on runs after the slow
+ * summary call. No-op unless the on-disk record is still the SAME session + project + unconsumed
+ * (so a race with the next session, or an already-shown recap, never gets a stale summary). Never throws.
+ */
+export function patchLastOutcomeSummary(baseDir, endedSessionId, projectKey, summary) {
+    try {
+        const rec = readJson(outcomePath(baseDir), null);
+        if (rec === null || rec.consumed)
+            return;
+        if (rec.endedSessionId !== endedSessionId || rec.projectKey !== projectKey)
+            return;
+        writeJsonAtomic(outcomePath(baseDir), { ...rec, summary });
+    }
+    catch {
+        // best effort — the facts already landed; a missing summary just drops the 3rd line.
+    }
+}
 /** Mark the current record consumed (so it surfaces exactly once). Never throws. */
 export function markOutcomeConsumed(baseDir) {
     try {

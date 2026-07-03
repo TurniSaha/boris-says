@@ -27,6 +27,14 @@ export interface OutcomeFile {
    * back-compat: an old record with no projectKey is treated as '' (unscoped → never shown).
    */
   readonly projectKey?: string;
+  /**
+   * TIER 3: a ≤2-line plain-English recap of WHAT the ended session was about, generated
+   * by one bounded `claude -p` call at SessionEnd (grounded only in the transcript). Rendered
+   * as an extra banner line UNDER the facts on project-return. Optional + back-compat: a legacy
+   * record (or a trivial/failed generation) simply has no summary, and only the facts surface.
+   * Never a coach judgment or a score — it is a recap of the DEV's own work.
+   */
+  readonly summary?: string;
   /** Whether it has already been surfaced to the dev (consume-once). */
   readonly consumed: boolean;
   /** When it was computed (ms). */
@@ -76,6 +84,28 @@ export function readPendingOutcome(
   const recKey = typeof rec.projectKey === 'string' ? rec.projectKey : '';
   if (recKey === '' || recKey !== currentProjectKey) return null;
   return rec;
+}
+
+/**
+ * Patch the "what it was about" summary onto the just-written record (TIER 3). The facts are
+ * written first + instantly by writeLastOutcome; this best-effort add-on runs after the slow
+ * summary call. No-op unless the on-disk record is still the SAME session + project + unconsumed
+ * (so a race with the next session, or an already-shown recap, never gets a stale summary). Never throws.
+ */
+export function patchLastOutcomeSummary(
+  baseDir: string,
+  endedSessionId: string,
+  projectKey: string,
+  summary: string,
+): void {
+  try {
+    const rec = readJson<OutcomeFile | null>(outcomePath(baseDir), null);
+    if (rec === null || rec.consumed) return;
+    if (rec.endedSessionId !== endedSessionId || rec.projectKey !== projectKey) return;
+    writeJsonAtomic(outcomePath(baseDir), { ...rec, summary });
+  } catch {
+    // best effort — the facts already landed; a missing summary just drops the 3rd line.
+  }
 }
 
 /** Mark the current record consumed (so it surfaces exactly once). Never throws. */

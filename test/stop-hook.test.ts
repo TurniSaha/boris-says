@@ -232,6 +232,7 @@ describe('runStopHook — cross-turn claim gets the attribution label (defensive
 describe('runStopHook — outcome recap rides the shared gated helper (PLAN Step 5/7)', () => {
   it('a same-project pending recap surfaces at Stop when this session never showed it (first attempt), once', async () => {
     const pk = projectKeyForCwd('/work/dir');
+    store.markGreetedIfFirst('prior'); // engaged install → FIX-1 tour-defer does not skip the recap.
     writeLastOutcome(baseDir, { line: 'Last session: 9 tests passed.', endedSessionId: 'prev', projectKey: pk, consumed: false, at: 1 });
     const { out, text } = capture();
 

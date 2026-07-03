@@ -16,6 +16,19 @@ import {
 import { runSessionOutcome } from '../src/session-outcome.js';
 import { runHook } from '../src/hook.js';
 import { createStore } from '../src/state/store.js';
+import type { LlmBackend } from '../src/llm/backend.js';
+import { projectKeyForCwd } from '../src/config.js';
+
+/** A stub backend that returns a canned summary (or null / throws) with ZERO spawn. */
+function stubBackend(result: string | null | (() => never)): LlmBackend {
+  return {
+    configured: true,
+    async complete() {
+      if (typeof result === 'function') return result();
+      return result;
+    },
+  };
+}
 
 let baseDir: string;
 beforeEach(() => {
@@ -102,8 +115,8 @@ describe('W2-OUTCOME — runSessionOutcome (SessionEnd)', () => {
     JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1' }] }, toolUseResult: { stdout: '      Tests  53 passed (53)', stderr: '', interrupted: false } }),
   ].join('\n');
 
-  it('computes + writes the global outcome file (with projectKey from cwd) from the ended JSONL', () => {
-    runSessionOutcome({
+  it('computes + writes the global outcome file (with projectKey from cwd) from the ended JSONL', async () => {
+    await runSessionOutcome({
       stdin: JSON.stringify({ session_id: 'sess-A', transcript_path: '/fake.jsonl', cwd: '/Users/x/ProjA/' }),
       env: { PROMPT_COACH_DIR: baseDir },
       readTranscript: () => jsonlWithTests,
@@ -120,7 +133,7 @@ describe('W2-OUTCOME — runSessionOutcome (SessionEnd)', () => {
     expect(onDisk.projectKey.endsWith('/')).toBe(false);
   });
 
-  it('the DEFAULT transcript reader is byte-capped: a >32MiB session .jsonl is skipped (no OOM), writes nothing', () => {
+  it('the DEFAULT transcript reader is byte-capped: a >32MiB session .jsonl is skipped (no OOM), writes nothing', async () => {
     // Finish the 32MiB-read-cap hardening: the SessionEnd default reader must go through
     // readFileCapped like every other transcript/corpus read, so a pathologically huge
     // session file is skipped rather than read whole into the detached process.
@@ -135,7 +148,7 @@ describe('W2-OUTCOME — runSessionOutcome (SessionEnd)', () => {
     const filler = '\n'.repeat(MAX_JSONL_BYTES + 1 - head.length);
     writeFileSync(huge, head + filler);
     // No injected readTranscript → exercises the real defaultReadTranscript.
-    runSessionOutcome({
+    await runSessionOutcome({
       stdin: JSON.stringify({ session_id: 'sess-A', transcript_path: huge, cwd: '/Users/x/ProjA/' }),
       env: { PROMPT_COACH_DIR: baseDir },
       now: () => 5000,
@@ -143,12 +156,12 @@ describe('W2-OUTCOME — runSessionOutcome (SessionEnd)', () => {
     expect(existsSync(join(baseDir, 'last-outcome.json'))).toBe(false);
   });
 
-  it('writes NOTHING when there is no measured signal (honesty: no fabricated line)', () => {
+  it('writes NOTHING when there is no measured signal (honesty: no fabricated line)', async () => {
     const noSignal = [
       JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }] } }),
       JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1' }] }, toolUseResult: { stdout: 'file', stderr: '', interrupted: false } }),
     ].join('\n');
-    runSessionOutcome({ stdin: JSON.stringify({ session_id: 'sess-A', transcript_path: '/f' }), env: { PROMPT_COACH_DIR: baseDir }, readTranscript: () => noSignal });
+    await runSessionOutcome({ stdin: JSON.stringify({ session_id: 'sess-A', transcript_path: '/f' }), env: { PROMPT_COACH_DIR: baseDir }, readTranscript: () => noSignal });
     expect(existsSync(join(baseDir, 'last-outcome.json'))).toBe(false);
   });
 
@@ -173,10 +186,13 @@ describe('W2-OUTCOME — end-to-end SessionEnd → next-session hook surfaces on
     // Session A ends in project CWD → write (projectKey from cwd).
     runSessionOutcome({ stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }), env: { PROMPT_COACH_DIR: baseDir }, readTranscript: () => jsonlWithTests, now: () => 1 });
 
-    // Session B's first prompt IN THE SAME PROJECT → the hook surfaces it.
+    // Session B's first prompt IN THE SAME PROJECT → the hook surfaces it. An ENGAGED store
+    // (a returning user, by definition — mirrors makeEngagedStore) so the FIX-1 tour-defer
+    // guard does not skip the recap this turn.
     const captured: string[] = [];
     const fakeOut = { write: (s: string) => { captured.push(s); return true; } } as unknown as NodeJS.WriteStream;
     const store = createStore(baseDir);
+    store.markGreetedIfFirst('prior'); // engagement marker → not a fresh pre-tour install.
     const hookStdin = JSON.stringify({ session_id: 'B', transcript_path: '/b.jsonl', cwd: CWD, prompt: 'hello' });
 
     runHook({ stdin: hookStdin, env: { PROMPT_COACH_DIR: baseDir }, hookDirname: baseDir, store, spawnFn: () => ({ unref() {} }), out: fakeOut });
@@ -236,6 +252,7 @@ describe('W2-OUTCOME — demoted L34b prune clause (SessionEnd → next same-pro
     const captured: string[] = [];
     const fakeOut = { write: (s: string) => { captured.push(s); return true; } } as unknown as NodeJS.WriteStream;
     const store = createStore(baseDir);
+    store.markGreetedIfFirst('prior'); // engaged install → FIX-1 tour-defer does not skip the recap.
     const stdin = JSON.stringify({ session_id: sessionId, transcript_path: '/b.jsonl', cwd, prompt: 'hello' });
     runHook({ stdin, env: { PROMPT_COACH_DIR: baseDir }, hookDirname: baseDir, store, spawnFn: () => ({ unref() {} }), out: fakeOut });
     return captured.join('');
@@ -291,6 +308,69 @@ describe('W2-OUTCOME — demoted L34b prune clause (SessionEnd → next same-pro
 // mid-session; it waits for the NEXT session's first prompt. Both UPS and Stop go
 // through the ONE shared helper (surfaceOutcomeRecap), so the gates cannot diverge.
 
+// ── FIX 1: the first-run TOUR wins a new user's first message ───────────────────
+// On a genuinely fresh, un-toured install the recap must DEFER to the tour: it is
+// skipped this turn (a pure read of !tourShown && !engaged) but NOT consumed — it
+// still surfaces on the NEXT project-return. An ENGAGED install (owner's shape) never
+// sees the tour, so its recap behavior is UNCHANGED (regression pin).
+
+describe('FIX 1 — first-run tour wins the first message (recap defers on a pre-tour install)', () => {
+  const jsonlWithTests = [
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] } }),
+    JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1' }] }, toolUseResult: { stdout: '      Tests  7 passed (7)', stderr: '', interrupted: false } }),
+  ].join('\n');
+  const CWD = '/Users/x/ProjA';
+
+  function writeRecap(): void {
+    runSessionOutcome({ stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }), env: { PROMPT_COACH_DIR: baseDir }, readTranscript: () => jsonlWithTests, now: () => 1 });
+  }
+
+  function promptOnce(store: ReturnType<typeof createStore>, sessionId: string): string {
+    const captured: string[] = [];
+    const fakeOut = { write: (s: string) => { captured.push(s); return true; } } as unknown as NodeJS.WriteStream;
+    const stdin = JSON.stringify({ session_id: sessionId, transcript_path: '/b.jsonl', cwd: CWD, prompt: 'hello' });
+    runHook({ stdin, env: { PROMPT_COACH_DIR: baseDir }, hookDirname: baseDir, store, spawnFn: () => ({ unref() {} }), out: fakeOut });
+    return captured.join('');
+  }
+
+  /** Simulate an engaged install (owner's shape: greeted a prior session + toured + a rating). */
+  function makeEngagedStore(): ReturnType<typeof createStore> {
+    const store = createStore(baseDir);
+    store.markGreetedIfFirst('prior-session'); // engagement marker
+    store.markTourShownIfFirst();              // tour already shown (tourShown=true)
+    return store;
+  }
+
+  it('a FRESH pre-tour install returning to a project SKIPS the recap this turn (tour wins) — record stays pending for the next return', () => {
+    writeRecap();
+    // Fresh install: no engagement, tourShown=false → the tour will show, so the recap defers.
+    const store = createStore(baseDir);
+    expect(promptOnce(store, 'B')).not.toContain('7 tests passed'); // recap SKIPPED this turn.
+    // NOT consumed: a later project-return on a now-engaged/toured install surfaces it once.
+    // (The tour runs in the detached judge, faked here — so materialize the post-tour engaged
+    // shape explicitly, mirroring makeEngagedStore.)
+    const engaged = makeEngagedStore(); // post-tour / engaged install
+    expect(promptOnce(engaged, 'C')).toContain('7 tests passed');
+  });
+
+  it('the deferred recap is still on disk & unconsumed after the tour turn', () => {
+    writeRecap();
+    const store = createStore(baseDir);
+    promptOnce(store, 'B'); // tour turn — recap deferred, not consumed
+    const pending = readPendingOutcome(baseDir, 'later-session', PK); // PK unused here; read raw
+    // The record is still present & unconsumed (a different-project read is null, but the file exists).
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.consumed).toBe(false);
+    void pending;
+  });
+
+  it('REGRESSION: an ENGAGED install (owner shape: greeted/toured/rated) STILL fires the recap on its first prompt', () => {
+    writeRecap();
+    const store = makeEngagedStore();
+    expect(promptOnce(store, 'B')).toContain('7 tests passed'); // engaged never tours → recap unchanged.
+  });
+});
+
 describe('M2 — strict first-prompt-only recap gate (mid-session records never pop)', () => {
   const jsonlWithTests = [
     JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] } }),
@@ -308,6 +388,7 @@ describe('M2 — strict first-prompt-only recap gate (mid-session records never 
 
   it('a record landing AFTER a session\'s first prompt does NOT pop mid-session — it waits for the NEXT session', () => {
     const store = createStore(baseDir);
+    store.markGreetedIfFirst('prior'); // engaged install → FIX-1 tour-defer does not skip the recap.
     // Session B's FIRST prompt: no record pending yet → nothing shown, gate consumed.
     expect(promptOnce(store, 'B')).not.toContain('7 tests passed');
     // NOW a same-project session ends and writes its recap.
@@ -317,5 +398,171 @@ describe('M2 — strict first-prompt-only recap gate (mid-session records never 
     // A NEW session's first prompt: surfaces it exactly once.
     expect(promptOnce(store, 'C')).toContain('7 tests passed');
     expect(promptOnce(store, 'C')).not.toContain('7 tests passed');
+  });
+});
+
+// ── TIER 3: "what it was about" summary (generated at SessionEnd, rendered at recall) ─
+//
+// A ≤2-line plain-English recap of the last session, generated by ONE bounded claude -p
+// call at SessionEnd (backend injected so tests never spawn), stored on the outcome
+// record, and rendered as a 3rd banner line under the facts on same-project return.
+// Degrades to facts-only on: no backend / null / throw / empty / >200 chars.
+
+describe('TIER 3 — SessionEnd generates + stores the "what it was about" summary', () => {
+  const jsonlWithTests = [
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] } }),
+    JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1' }] }, toolUseResult: { stdout: '      Tests  12 passed (12)', stderr: '', interrupted: false } }),
+  ].join('\n');
+  const CWD = '/Users/x/ProjA';
+
+  function endSession(backend: LlmBackend | undefined): Promise<void> {
+    return runSessionOutcome({
+      stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }),
+      env: { PROMPT_COACH_DIR: baseDir },
+      readTranscript: () => jsonlWithTests,
+      now: () => 1,
+      backend,
+    });
+  }
+
+  it('an injected backend returning a summary stores it on the record (with the facts)', async () => {
+    await endSession(stubBackend('You were adding OAuth to the login flow and left token-refresh untested.'));
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.line).toContain('12 tests passed'); // facts still computed.
+    expect(onDisk.summary).toContain('adding OAuth');
+  });
+
+  it('backend returning null → no summary field (facts still written), still exits cleanly', async () => {
+    await endSession(stubBackend(null));
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.line).toContain('12 tests passed');
+    expect(onDisk.summary ?? '').toBe('');
+  });
+
+  it('backend that THROWS → no summary field, record still written, never throws', async () => {
+    await expect(endSession(stubBackend(() => { throw new Error('boom'); }))).resolves.toBeUndefined();
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.line).toContain('12 tests passed');
+    expect(onDisk.summary ?? '').toBe('');
+  });
+
+  it('backend returning empty / whitespace → no summary field', async () => {
+    await endSession(stubBackend('   \n  '));
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.summary ?? '').toBe('');
+  });
+
+  it('backend returning >200 chars → dropped (no summary field)', async () => {
+    await endSession(stubBackend('x'.repeat(201)));
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.summary ?? '').toBe('');
+  });
+
+  it('FACTS-FIRST (user-safety): a HUNG backend never delays or loses the facts', async () => {
+    // The core of the adversarial HIGH: a never-resolving summary call must NOT block the facts.
+    // With facts-first ordering the record exists the instant the write completes; the bounded
+    // summary patch resolves via the timeout and the facts are intact either way.
+    const hung: LlmBackend = {
+      configured: true,
+      complete: () => new Promise(() => {}), // never resolves — mimics a hung claude -p child.
+    };
+    const t0 = Date.now();
+    await runSessionOutcome({
+      stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }),
+      env: { PROMPT_COACH_DIR: baseDir },
+      readTranscript: () => jsonlWithTests,
+      now: () => 1,
+      backend: hung,
+      summaryTimeoutMs: 20, // tight bound so the test is fast; proves the race resolves.
+    });
+    expect(Date.now() - t0).toBeLessThan(500); // resolved via the bound, not hung.
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.line).toContain('12 tests passed'); // FACTS SURVIVE the hung summary.
+    expect(onDisk.summary ?? '').toBe(''); // no summary — but never at the cost of the facts.
+  });
+
+  it('NO backend at all → no summary field, facts still written (graceful degrade)', async () => {
+    await endSession(undefined);
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.line).toContain('12 tests passed');
+    expect(onDisk.summary ?? '').toBe('');
+  });
+
+  it('the summary call is bounded: a backend that never resolves does NOT hang SessionEnd', async () => {
+    const hanging: LlmBackend = { configured: true, complete: () => new Promise<string | null>(() => {}) };
+    // With a tiny injected timeout budget the call must resolve (facts written, no summary).
+    await runSessionOutcome({
+      stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }),
+      env: { PROMPT_COACH_DIR: baseDir },
+      readTranscript: () => jsonlWithTests,
+      now: () => 1,
+      backend: hanging,
+      summaryTimeoutMs: 20,
+    });
+    const onDisk = JSON.parse(readFileSync(join(baseDir, 'last-outcome.json'), 'utf8'));
+    expect(onDisk.line).toContain('12 tests passed');
+    expect(onDisk.summary ?? '').toBe('');
+  });
+});
+
+describe('TIER 3 — recall renders the summary as a 3rd line under the facts, same-project only', () => {
+  const jsonlWithTests = [
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] } }),
+    JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1' }] }, toolUseResult: { stdout: '      Tests  12 passed (12)', stderr: '', interrupted: false } }),
+  ].join('\n');
+  const CWD = '/Users/x/ProjA';
+
+  function promptOnce(store: ReturnType<typeof createStore>, sessionId: string, cwd = CWD): string {
+    store.markGreetedIfFirst('prior'); // engaged install → FIX-1 tour-defer does not skip the recap.
+    const captured: string[] = [];
+    const fakeOut = { write: (s: string) => { captured.push(s); return true; } } as unknown as NodeJS.WriteStream;
+    const stdin = JSON.stringify({ session_id: sessionId, transcript_path: '/b.jsonl', cwd, prompt: 'hello' });
+    runHook({ stdin, env: { PROMPT_COACH_DIR: baseDir }, hookDirname: baseDir, store, spawnFn: () => ({ unref() {} }), out: fakeOut });
+    return captured.join('');
+  }
+
+  it('surfaces the facts AND the summary line on same-project return', async () => {
+    await runSessionOutcome({
+      stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }),
+      env: { PROMPT_COACH_DIR: baseDir },
+      readTranscript: () => jsonlWithTests,
+      now: () => 1,
+      backend: stubBackend('You were adding OAuth to the login flow.'),
+    });
+    const out = promptOnce(createStore(baseDir), 'B');
+    expect(out).toContain('12 tests passed');
+    expect(out).toContain('adding OAuth to the login flow');
+  });
+
+  it('a DIFFERENT project first prompt does NOT show this project summary (scoping pin)', async () => {
+    await runSessionOutcome({
+      stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }),
+      env: { PROMPT_COACH_DIR: baseDir },
+      readTranscript: () => jsonlWithTests,
+      now: () => 1,
+      backend: stubBackend('You were adding OAuth to the login flow.'),
+    });
+    const out = promptOnce(createStore(baseDir), 'B', '/Users/x/OtherProject');
+    expect(out).not.toContain('adding OAuth');
+  });
+
+  it('a legacy outcome record WITHOUT the summary field loads + surfaces facts only', () => {
+    // Hand-write a legacy record (no `summary` key at all).
+    writeLastOutcome(baseDir, { line: 'Last time here: 5 tests passed.', endedSessionId: 'old', projectKey: projectKeyForCwd(CWD), consumed: false, at: 1 });
+    const out = promptOnce(createStore(baseDir), 'B');
+    expect(out).toContain('5 tests passed'); // facts render; no crash on the missing field.
+  });
+
+  it('REGRESSION: a project-return renders EXACTLY ONE Boris title line (recap subsumes liveness, not two)', async () => {
+    await runSessionOutcome({
+      stdin: JSON.stringify({ session_id: 'A', transcript_path: '/f', cwd: CWD }),
+      env: { PROMPT_COACH_DIR: baseDir },
+      readTranscript: () => jsonlWithTests,
+      now: () => 1,
+      backend: stubBackend('You were adding OAuth to the login flow.'),
+    });
+    const out = promptOnce(createStore(baseDir), 'B');
+    const titleCount = out.split("Boris says: I'm in your corner!").length - 1;
+    expect(titleCount).toBe(1); // one banner carries title + facts + summary — never a doubled title.
   });
 });

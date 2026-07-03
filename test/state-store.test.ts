@@ -367,6 +367,40 @@ describe('markTourShownIfFirst — once-per-INSTALL first-run tour (item 3)', ()
   });
 });
 
+describe('markLivenessShownIfFirst — once-per-SESSION liveness heartbeat flag', () => {
+  it('returns true the FIRST time a session is seen, false thereafter (same store)', () => {
+    const store = createStore(baseDir);
+    expect(store.markLivenessShownIfFirst('sess-A')).toBe(true);
+    expect(store.markLivenessShownIfFirst('sess-A')).toBe(false);
+    expect(store.markLivenessShownIfFirst('sess-A')).toBe(false);
+  });
+
+  it('PERSISTS across a fresh store instance (the hook is a new process each prompt)', () => {
+    createStore(baseDir).markLivenessShownIfFirst('sess-B');
+    expect(createStore(baseDir).markLivenessShownIfFirst('sess-B')).toBe(false);
+  });
+
+  it('is a SEPARATE flag from greeted / outcomeRecap (neither consumes the other)', () => {
+    const store = createStore(baseDir);
+    expect(store.markLivenessShownIfFirst('sess-C')).toBe(true);
+    // The other per-session first-prompt flags are still un-consumed for this session.
+    expect(store.markGreetedIfFirst('sess-C')).toBe(true);
+    expect(store.markOutcomeRecapShownIfFirst('sess-C')).toBe(true);
+    // And consuming those did not re-arm liveness.
+    expect(store.markLivenessShownIfFirst('sess-C')).toBe(false);
+  });
+
+  it('an empty session id never fires (no blank-key loop)', () => {
+    expect(createStore(baseDir).markLivenessShownIfFirst('')).toBe(false);
+  });
+
+  it('caps the list so it cannot grow unbounded', () => {
+    const store = createStore(baseDir);
+    for (let i = 0; i < 600; i += 1) store.markLivenessShownIfFirst('s' + i);
+    expect(store.getState().livenessShownSessions.length).toBeLessThanOrEqual(500);
+  });
+});
+
 describe('markQualityTip — per-session cooldown (cross-session bleed fix)', () => {
   it('stamps the per-session map AND the global field on a fire', () => {
     const store = createStore(baseDir);

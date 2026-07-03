@@ -127,6 +127,14 @@ export interface CoachState {
    */
   outcomeRecapShownSessions: string[];
   /**
+   * TIER 1 liveness: session ids that have already shown the once-per-session "I'm in your
+   * corner!" heartbeat banner. SEPARATE from greetedSessions / outcomeRecapShownSessions on
+   * purpose — all three gate on "first prompt of this session" and must NOT consume each
+   * other's flag (the documented flag-separation rule). Cheap, deterministic, install-wide
+   * persisted so the synchronous hook fires it exactly once per session.
+   */
+  livenessShownSessions: string[];
+  /**
    * M2 [A2]: turnIds the judge has FINISHED judging (deposited OR silent). The Stop-hook
    * poll exits the instant it sees the current turn's id here with no tip waiting — a
    * silent (well-formed) turn therefore never stalls the turn end. Capped ring.
@@ -189,6 +197,7 @@ export function defaultState(): CoachState {
     greetedSessions: [],
     tourShown: false,
     outcomeRecapShownSessions: [],
+    livenessShownSessions: [],
     judgedTurns: [],
     lastIndexRefreshAt: null,
     watch: null,
@@ -313,6 +322,12 @@ export interface Store {
    * other's first-prompt gate.
    */
   markOutcomeRecapShownIfFirst(sessionId: string): boolean;
+  /**
+   * TIER 1 liveness: true the FIRST time this session asks to show the "I'm in your corner!"
+   * heartbeat banner; false after (once-per-session). SEPARATE flag from the greet + recap so
+   * none of the three consume another's first-prompt gate.
+   */
+  markLivenessShownIfFirst(sessionId: string): boolean;
   /** F-FEEDBACK: the current adaptive floor delta for a lever (0 until ≥ N ratings). */
   floorDeltaForLever(lever: string): number;
 
@@ -561,6 +576,16 @@ export function createStore(baseDir: string = DEFAULT_BASE_DIR): Store {
     return true;
   }
 
+  function markLivenessShownIfFirst(sessionId: string): boolean {
+    if (!sessionId) return false; // no id → never fire (avoid a blank-key loop).
+    const s = getState();
+    const seen = s.livenessShownSessions ?? [];
+    if (seen.includes(sessionId)) return false;
+    const next = [...seen, sessionId].slice(-500);
+    saveState({ ...s, livenessShownSessions: next });
+    return true;
+  }
+
   function floorDeltaForLever(lever: string): number {
     return adaptiveFloorDelta(getState().feedbackByLever[lever]);
   }
@@ -642,6 +667,7 @@ export function createStore(baseDir: string = DEFAULT_BASE_DIR): Store {
     markGreetedIfFirst,
     markTourShownIfFirst,
     markOutcomeRecapShownIfFirst,
+    markLivenessShownIfFirst,
     observeWatch,
     recordWithheldTip,
     markAnnouncedIfFirst,

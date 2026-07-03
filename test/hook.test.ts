@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runHook, type SpawnFn, type HookDeps } from '../src/hook.js';
 import { createStore, type Store } from '../src/state/store.js';
+import { formatCoachBanner } from '../src/brain/mailbox-format.js';
 
 let baseDir: string;
 
@@ -285,6 +286,7 @@ describe('runHook — does NOT run the cascade itself', () => {
       undoLastRating: track('undoLastRating', real.undoLastRating),
       markGreetedIfFirst: track('markGreetedIfFirst', real.markGreetedIfFirst),
       markOutcomeRecapShownIfFirst: track('markOutcomeRecapShownIfFirst', real.markOutcomeRecapShownIfFirst),
+      markLivenessShownIfFirst: track('markLivenessShownIfFirst', real.markLivenessShownIfFirst),
       floorDeltaForLever: real.floorDeltaForLever,
     };
     runHook(baseDeps({ store: spyStore, spawnFn: recordingSpawn().fn }));
@@ -386,4 +388,73 @@ describe('runHook — M2 turn minting (beginTurn + inbox turn_id)', () => {
     const out = { write: (s: string) => { chunks.push(s); return true; } } as unknown as NodeJS.WriteStream;
     return { out, text: () => chunks.join('') };
   }
+});
+
+// ── TIER 1: the per-session LIVENESS heartbeat banner ──────────────────────────
+// Every session's FIRST prompt deposits a single title-only banner ("Boris says: I'm
+// in your corner!") with NO teaching body — a cheap deterministic proof the plugin
+// loaded. It is ADDITIVE (arms no cooldown, suppresses no real tip) and fires exactly
+// once per session. On a project-return it is SUBSUMED by the recap banner (which
+// already carries the title) → exactly ONE Boris title line, never two.
+
+describe('runHook — TIER 1 liveness heartbeat (per-session first-prompt banner)', () => {
+  function captured(): { out: NodeJS.WriteStream; text: () => string } {
+    const chunks: string[] = [];
+    const out = { write: (s: string) => { chunks.push(s); return true; } } as unknown as NodeJS.WriteStream;
+    return { out, text: () => chunks.join('') };
+  }
+  /** Count the Boris title strip occurrences in rendered output. */
+  function titleCount(text: string): number {
+    return text.split("Boris says: I'm in your corner!").length - 1;
+  }
+
+  it('a FIRST prompt with no pending recap deposits the one-line liveness banner (title, no teaching body)', () => {
+    const { out, text } = captured();
+    runHook(baseDeps({ stdin: stdinFor('build me a thing', 'sess-live'), out, spawnFn: recordingSpawn().fn }));
+    expect(text()).toContain("Boris says: I'm in your corner!");
+    // No teaching body: the first-run tour lines must NOT be here (that is a separate cascade concern).
+    expect(text()).not.toContain('I watch how you drive Claude Code');
+    expect(text()).not.toContain('/coach find');
+  });
+
+  it('fires EXACTLY once per session — a 2nd prompt in the same session does NOT re-fire it', () => {
+    const store = createStore(baseDir);
+    const first = captured();
+    runHook(baseDeps({ stdin: stdinFor('one', 'sess-live'), store, out: first.out, spawnFn: recordingSpawn().fn }));
+    expect(first.text()).toContain("Boris says: I'm in your corner!");
+    const second = captured();
+    runHook(baseDeps({ stdin: stdinFor('two', 'sess-live'), store, out: second.out, spawnFn: recordingSpawn().fn }));
+    expect(second.text()).not.toContain("Boris says: I'm in your corner!");
+  });
+
+  it('REGRESSION: the liveness banner arms NEITHER the quality cooldown NOR any lever cooldown', () => {
+    const store = createStore(baseDir);
+    runHook(baseDeps({ stdin: stdinFor('build me a thing', 'sess-live'), store, spawnFn: recordingSpawn().fn }));
+    const s = store.getState();
+    expect(s.lastQualityTipAt).toBeNull();
+    expect(s.lastQualityTipBySession['sess-live']).toBeUndefined();
+    expect(s.lastHabitNudgeAt).toBeNull();
+  });
+
+  it('REGRESSION: the liveness banner does NOT suppress a real coaching tip waiting in the mailbox', () => {
+    const store = createStore(baseDir);
+    // A real deposited tip is a full formatCoachBanner (the judge deposits banners) — so it
+    // already carries the Boris title (which IS the heartbeat). The liveness path must NOT
+    // suppress it, and must NOT add a SECOND systemMessage object (Claude Code expects one).
+    store.writeMailbox('sess-live', { kind: 'quality', message: formatCoachBanner('REAL COACHING TIP'), turnId: 'sess-live#old' });
+    const { out, text } = captured();
+    runHook(baseDeps({ stdin: stdinFor('build me a thing', 'sess-live'), store, out, spawnFn: recordingSpawn().fn }));
+    // The real tip surfaces (not suppressed) and its own banner carries the heartbeat title…
+    expect(text()).toContain("Boris says: I'm in your corner!");
+    expect(text()).toContain('REAL COACHING TIP');
+    // …as EXACTLY ONE systemMessage JSON object (the liveness banner does not double it).
+    expect(text().trim().split('\n').filter((l) => l.trim().length > 0)).toHaveLength(1);
+  });
+
+  it('the sentinel path does NOT ALSO fire a second liveness banner (one title on a sentinel turn)', () => {
+    const { out, text } = captured();
+    runHook(baseDeps({ stdin: stdinFor('when life gives you lemons', 'sess-live'), out, spawnFn: recordingSpawn().fn }));
+    expect(text()).toContain('make lemonade!');
+    expect(titleCount(text())).toBe(1); // the sentinel banner only — no extra liveness title.
+  });
 });
