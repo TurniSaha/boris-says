@@ -28,6 +28,18 @@ describe('formatCoachBanner — the loud ANSI panel', () => {
     expect(out).toContain("Boris says");
   });
 
+  it('the TIER-1 liveness banner (empty message) renders the title ONLY — NO yellow body box', () => {
+    // Regression: an empty body used to draw hollow yellow rows under the title (owner-reported
+    // "empty yellow box"). The liveness heartbeat must be the blue title strip alone.
+    const BODY_YELLOW = '48;5;226m'; // the yellow body-panel SGR code
+    const liveness = formatCoachBanner('');
+    expect(liveness).toContain('Boris says'); // title still shows
+    expect(liveness.split('\n').filter((l) => l.includes(BODY_YELLOW))).toHaveLength(0); // ZERO yellow rows
+    // Control: a real tip still renders its yellow body.
+    const tip = formatCoachBanner('split this into separate asks');
+    expect(tip.split('\n').filter((l) => l.includes(BODY_YELLOW)).length).toBeGreaterThan(0);
+  });
+
   it('every rendered (non-leading) line pads to the fixed panel width (stripped fallback reads as a block)', () => {
     const out = formatCoachBanner('short');
     const stripped = stripAnsi(out)

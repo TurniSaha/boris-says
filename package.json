@@ -1,6 +1,6 @@
 {
   "name": "boris-says",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Boris Says — the real-time coach in your corner. Boris Cherny watches how you drive Claude Code and speaks only when it matters. Local-only, no server.",
   "type": "module",
   "license": "MIT",

@@ -114,15 +114,20 @@ export function withPromptAttribution(banner, aboutPrompt) {
     return banner.startsWith('\n') ? `\n${label}${banner}` : `\n${label}\n${banner}`;
 }
 export function formatCoachBanner(message, opts = {}) {
-    const bodyLines = wrapBody(message, PANEL_WIDTH);
-    const footer = opts.withRateHint === true ? [panelLine(BODY, RATE_HINT)] : [];
+    // An empty message (the TIER-1 liveness banner) renders the blue title strip ONLY — no yellow
+    // body panel at all. wrapBody('') returns [''] and there was an unconditional trailing yellow
+    // line, so an empty body used to draw a hollow yellow box under the title (owner-reported).
+    const hasBody = message.trim().length > 0;
+    const bodyLines = hasBody ? wrapBody(message, PANEL_WIDTH) : [];
+    const footer = hasBody && opts.withRateHint === true ? [panelLine(BODY, RATE_HINT)] : [];
+    const bodyBlock = hasBody
+        ? [...bodyLines.map((l) => panelLine(BODY, l)), ...footer, panelLine(BODY, '')]
+        : []; // title-only: no yellow rows.
     return [
         '',
         panelLine(TITLE, ''),
         panelLine(TITLE, '🤖  Boris says: I\'m in your corner!'),
         panelLine(TITLE, ''),
-        ...bodyLines.map((l) => panelLine(BODY, l)),
-        ...footer,
-        panelLine(BODY, ''),
+        ...bodyBlock,
     ].join('\n');
 }
