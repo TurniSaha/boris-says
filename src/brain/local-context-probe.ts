@@ -20,12 +20,12 @@
  *    separate, PERMISSIVE scan: we want assistant lines + any mode/effort fields, which
  *    the typed gate deliberately rejects.
  */
-import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LocalContext } from './judge-cascade.js';
 import type { CapabilityModelFamily } from '../capability/catalog.js';
+import { readFileCapped } from '../jsonl/read-capped.js';
 
 /** The injected I/O seams + the two payload-derived paths the probe reads. */
 export interface ProbeDeps {
@@ -60,13 +60,14 @@ const TEST_CMD_SIGNALS: readonly string[] = [
 /** Phrases that indicate plan mode is MANDATED (not merely mentioned). */
 const PLAN_MANDATE_WORDS: readonly string[] = ['always', 'mandatory', 'must', 'required'];
 
-/** Default file reader: utf8, null on any error (missing/permission/etc). NEVER throws. */
+/**
+ * Default file reader: utf8, null on any error (missing/permission/etc). NEVER throws.
+ * Size-capped (readFileCapped) so a pathologically huge transcript `.jsonl` skips rather
+ * than balloons the detached judge's memory. The 32 MiB cap is far above any real config
+ * file or session transcript, so a legitimate read is never dropped.
+ */
 function defaultReadFile(p: string): string | null {
-  try {
-    return readFileSync(p, 'utf8');
-  } catch {
-    return null;
-  }
+  return readFileCapped(p);
 }
 
 /** Default git runner: spawnSync, trimmed stdout on success, null on any error/failure. */

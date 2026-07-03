@@ -1,7 +1,7 @@
 /**
  * src/brain/mailbox-format.ts — the ANSI filled-panel banner renderer.
  *
- * EXTRACTION (spec §14) of the formatting half of bis-gastown
+ * EXTRACTION (spec §14) of the formatting half of the upstream coach service
  * `pm-service/src/coach/mailbox-nudge.ts`: `formatCoachBanner` + its private helpers
  * (`panelLine`, `wrapBody`) + the consts they depend on (`ESC`, `RESET`,
  * `PANEL_WIDTH = 50`, `TITLE`, `BODY`). The in-memory FIFO (`createMailboxNudge`,

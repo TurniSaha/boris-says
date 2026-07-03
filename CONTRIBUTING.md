@@ -44,6 +44,20 @@ npm run gate       # = npm run build && vitest run
 | `.claude-plugin/` | `plugin.json` + `marketplace.json` (install manifests) |
 | `docs/` | `SPEC.md` (design) and supporting notes |
 
+## Internal tag glossary (for reading the comments)
+
+Comments and test names carry a few short internal tags from the build's milestone tracking. They
+are labels for *when/why* a piece was added — not required to understand the code, but decoded here
+so nothing reads as an undefined magic token:
+
+| Tag | Meaning |
+|-----|---------|
+| `M1`–`M5` | Build milestones (M1 = relevance/matching, M2 = same-turn delivery, M5 = watch-first window, …). |
+| `W2-OUTCOME`, `W2-LEVEL1`, `W2-MODELGATE` | Build-wave-2 feature tags (session-outcome recap, taste conditioning, model-aware gating). |
+| `F-…`, `L01`/`L34b`/… | Individual coaching-lever IDs (a "lever" is one thing the coach can nudge about). |
+| `GOAL.md` | The private product-goals doc the design was driven from. It is **not public**; the invariants those comments cite (e.g. the prompt-intent relevance gate) are specified in [`docs/SPEC.md`](docs/SPEC.md). |
+| `SPEC §N` | A section of [`docs/SPEC.md`](docs/SPEC.md). |
+
 ## Conventions
 
 - **Many small files** over few large ones; high cohesion, low coupling.

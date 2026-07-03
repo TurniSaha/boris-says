@@ -19,7 +19,7 @@ From a clone of this repo:
 
 ```
 # In Claude Code:
-/plugin marketplace add /path/to/Claude-Coach
+/plugin marketplace add /path/to/boris-says
 /plugin install boris-says@boris-says
 ```
 

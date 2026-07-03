@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, writeFileSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -52,6 +52,17 @@ describe('writeJsonAtomic', () => {
     const p = join(baseDir, 'nested', 'deep', 'x.json');
     writeJsonAtomic(p, { ok: 1 });
     expect(existsSync(p)).toBe(true);
+  });
+
+  it('writes files owner-only (0600) so a co-tenant cannot read prompt text', () => {
+    // These files carry verbatim prompt text; on a shared host they must not be
+    // group/world-readable. POSIX-only assertion (Windows has no mode bits).
+    if (process.platform === 'win32') return;
+    const p = join(baseDir, 'created', 'x.json');
+    writeJsonAtomic(p, { secret: 'my verbatim prompt' });
+    expect(statSync(p).mode & 0o777).toBe(0o600);
+    // The directory writeJsonAtomic created is owner-only too.
+    expect(statSync(join(baseDir, 'created')).mode & 0o777).toBe(0o700);
   });
 });
 

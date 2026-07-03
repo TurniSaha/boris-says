@@ -21,7 +21,7 @@
  * outcome ledger, the per-dev cadence, or the aggregate ceiling. It is purely a
  * display-pipe heartbeat.
  *
- * PORT NOTE: ported verbatim from bis-gastown `pm-service/src/triggers/coach-liveness.ts`.
+ * PORT NOTE: ported verbatim from the upstream coach service (pm-service coach-liveness).
  * RE-KEY (spec §15c, decision #6): the source keyed the first-seen ping on
  * `roomId + sessionId`; locally `roomId` is dropped (single user) so the de-dup key is
  * `sessionId` alone — the signature is `check(sessionId, text)`.

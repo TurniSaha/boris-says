@@ -1,5 +1,14 @@
 # boris-says — Unified Build-Ready Spec
 
+> **What this document is.** This is the original **build-prompt artifact** — the design +
+> implementation brief the plugin was built from, preserved verbatim for provenance and
+> because it doubles as the authoritative design reference (data model, gates, cascade,
+> privacy contract). It is written as instructions to the builder, so it refers to a private
+> "upstream" source tree the plugin was ported from; that tree is **not public and not needed
+> to run, read, or contribute to** the plugin. The shipped code in `src/` is self-contained.
+> For a reader-facing tour start with the [README](../README.md); read on here for the full
+> design rationale.
+
 **Date:** 2026-06-22 · **Status:** design complete, build-ready (one-shot target) · **Repo:** `TurniSaha/boris-says`
 **Author:** owner + Claude (Opus 4.8, 1M) · interview via `/grill-me`, 16 decisions locked
 **Build method:** TDD, per-module Codex adversarial verify (the loop proven across the parent project).
@@ -61,7 +70,9 @@ NOT an accident to "fix" by wiring the plugin back into the server:
 
 ## 0.1 Source of truth (the canonical port source — READ THIS BEFORE WRITING CODE)
 
-**Canonical source root (absolute):** `<UPSTREAM_SOURCE_ROOT>`
+**Canonical source root (absolute):** the private upstream coach service tree (a local path on the
+author's machine, redacted here — this is a private, non-public source that is not required to build, run,
+or contribute to this plugin; the ported symbols are already committed under `src/`).
 
 All ported logic comes from that tree. The build target (`boris-says`) is a FRESH, empty repo — it has
 none of these files. You MUST open each source file at the absolute path below and copy the named symbols

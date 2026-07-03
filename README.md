@@ -11,7 +11,7 @@ It stays quiet when you're already prompting well — the survival rule is **pre
 coach that fires weak or wrong tips gets disabled, so this one is built to shut up.
 
 > **Status:** built and installable. Committed `dist/` (zero runtime dependencies), full test +
-> conformance gate green. Install with the steps below. See [`docs/SPEC.md`](docs/SPEC.md) for the design spec.
+> conformance gate green. Install with the steps below. See [`docs/SPEC.md`](docs/SPEC.md) for the full design and build spec.
 
 ## What it does during your session
 
@@ -30,8 +30,8 @@ coach that fires weak or wrong tips gets disabled, so this one is built to shut 
 
 3. **Skill discovery at the moment of need.** A committed index of **372 external skills/plugins** —
    272 from the two official Anthropic repos (`anthropics/skills`, `anthropics/claude-plugins-official`)
-   plus a 100-entry curated community slice (labeled `community`, held to stricter matching floors,
-   install commands generated never trusted; see `NOTICE`) — is matched against your current task by a precision-walled
+   plus a 100-entry curated community slice (labeled `community`, held to stricter matching floors, with
+   install commands shown for review, never run for you; see `NOTICE`) — is matched against your current task by a precision-walled
    matcher (multiple concordant signals required — a single generic word never triggers a match; an exact
    multi-word skill name typed verbatim does). When one genuinely fits, a
    tip shows **at most one** suggestion with its source URL, repo stars, and the install command. It
@@ -61,7 +61,7 @@ From a clone of this repo (the committed `dist/` means there is **no build step*
 
 ```text
 # In Claude Code:
-/plugin marketplace add /path/to/Claude-Coach
+/plugin marketplace add /path/to/boris-says
 /plugin install boris-says@boris-says
 ```
 
@@ -124,7 +124,7 @@ DROP the users table in prod and re-run the migration
 
 **…and the silences are the point.** The coach says **nothing** on a typo fix, a bare `continue`, or a
 read-only config check — terse, expert, and continuation prompts are presumptively fine. A coach that
-fires on those gets disabled; precision over recall is the survival rule.
+fires on those gets disabled, which is why it errs toward silence.
 
 If the judge finishes after the turn ends, the same banner arrives on your next prompt with a
 `⏪ about your prompt: "…"` attribution line on top.
@@ -163,7 +163,7 @@ There is also an offline eval harness (a blind judge scored against owner-ratifi
 numbers: on the 60-anchor set the blind text-only judge agreed with the author's labels 52/60 (~87%),
 Cohen's κ ≈ 0.56 — which does **not** clear the project's strict κ ≥ 0.60 calibration bar, partly a
 structural ceiling (many real prompts are image-rich; a text judge can't see what you saw). So the shipped
-quality signal is the live 👍/👎 loop, not a published precision number. See `eval/` for the methodology.
+quality signal is the live 👍/👎 loop, not a published precision number. The κ calibration harness lives in the development repo.
 
 ## Controls
 

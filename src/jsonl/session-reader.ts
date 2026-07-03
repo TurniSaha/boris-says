@@ -18,8 +18,8 @@
  * appear (SPEC §7.1 allows returning oldest-first directly instead of newest-first-
  * then-reverse; we pin oldest-first). `recentTranscriptWindow` slices the tail.
  */
-import { readFileSync } from 'node:fs';
 import { parseTypedPromptLine, type TypedPromptEvent } from './line-parser.js';
+import { readFileCapped } from './read-capped.js';
 
 /**
  * SPEC §7.1 step 4 — carry `DEPTH_LIMITS.session` (prompts: 20) so we never collect
@@ -38,13 +38,10 @@ export const MAX_TRANSCRIPT = 8;
  * half-written partial — it is skipped, not fatal.
  */
 export function readSessionTypedPrompts(path: string): readonly TypedPromptEvent[] {
-  let raw: string;
-  try {
-    raw = readFileSync(path, 'utf8');
-  } catch {
-    return [];
-  }
-  if (raw.length === 0) return [];
+  // readFileCapped stat()s first and skips a pathologically huge transcript rather
+  // than reading multiple GB into the detached judge (null → treat as no prior context).
+  const raw = readFileCapped(path);
+  if (raw === null || raw.length === 0) return [];
 
   const events: TypedPromptEvent[] = [];
   for (const line of raw.split('\n')) {

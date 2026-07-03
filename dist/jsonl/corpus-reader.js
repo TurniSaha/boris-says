@@ -14,10 +14,11 @@
  * choosing the MOST-RECENT files (by mtime) so a huge corpus does not blow memory.
  * Unreadable files are skipped, never fatal — and a missing projects dir yields [].
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { parseTypedPromptLine } from './line-parser.js';
+import { readFileCapped } from './read-capped.js';
 /** SPEC §7.1 — bound the corpus so a huge history does not blow memory. */
 export const DEFAULT_MAX_FILES = 200;
 /** Default corpus root on a real machine. */
@@ -41,14 +42,10 @@ export function readCorpusTypedPrompts(options = {}) {
         : files;
     const prompts = [];
     for (const file of bounded) {
-        let raw;
-        try {
-            raw = readFileSync(file.path, 'utf8');
-        }
-        catch {
-            continue; // skip unreadable file
-        }
-        if (raw.length === 0)
+        // Skip an oversized session file (readFileCapped stat-guards) rather than reading
+        // it whole into the detached miner — an outlier file just contributes no prompts.
+        const raw = readFileCapped(file.path);
+        if (raw === null || raw.length === 0)
             continue;
         for (const line of raw.split('\n')) {
             if (line.length === 0)

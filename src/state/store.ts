@@ -54,6 +54,16 @@ export const FEEDBACK_MAX_DELTA = 0.2;
 
 export const DEFAULT_BASE_DIR = join(homedir(), '.claude', 'prompt-coach');
 
+/**
+ * Owner-only permission bits for everything the coach writes under ~/.claude/prompt-coach/.
+ * These files carry the user's VERBATIM prompt text (state.json, mailbox/inbox tips, the
+ * feedback-anchor corpus, habit drafts), so on a shared multi-user host a co-tenant local
+ * user must not be able to read them. Directories are 0700 (owner rwx only); files are 0600
+ * (owner rw only). The default umask (022) would otherwise leave these world+group readable.
+ */
+export const DIR_MODE = 0o700;
+export const FILE_MODE = 0o600;
+
 // ── Types ───────────────────────────────────────────────────────────────────
 /**
  * F-FEEDBACK: the last quality tip surfaced (lever + prompt), so a `/coach 👍/👎` rating can
@@ -206,11 +216,12 @@ export function adaptiveFloorDelta(fb: LeverFeedback | undefined): number {
 // ── Primitive atomic IO ──────────────────────────────────────────────────────
 /** Write `obj` as JSON via a temp sibling + atomic rename. Never leaves a partial. */
 export function writeJsonAtomic(path: string, obj: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true, mode: DIR_MODE });
   // Unique temp suffix so two concurrent writers to the same target never
   // share a temp file (the rename is the atomic commit point).
   const tmp = `${path}.tmp.${process.pid}.${monotonic()}`;
-  writeFileSync(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  // mode 0600: the committed file carries verbatim prompt text — owner-only.
+  writeFileSync(tmp, JSON.stringify(obj, null, 2), { encoding: 'utf8', mode: FILE_MODE });
   renameSync(tmp, path);
 }
 

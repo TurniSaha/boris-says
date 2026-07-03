@@ -46,6 +46,8 @@ import {
   type Store,
   QUALITY_COOLDOWN_MS,
   HABIT_COOLDOWN_MS,
+  DIR_MODE,
+  FILE_MODE,
 } from './state/store.js';
 import { resolveWatch, WATCH_MIN_PROMPTS, WATCH_MIN_SESSIONS } from './state/watch.js';
 import { createPatternsStore, type PatternsStore, type PatternDraft } from './habit/patterns-store.js';
@@ -512,8 +514,13 @@ export function main(argv: string[], env: CoachCmdEnv = process.env): void {
         recordFeedbackAnchor: (anchor) => {
           // Append one JSONL line to the local feedback corpus (never throws — best effort).
           try {
-            mkdirSync(baseDir, { recursive: true });
-            appendFileSync(join(baseDir, 'feedback-anchors.jsonl'), JSON.stringify(anchor) + '\n', 'utf8');
+            // 0700 dir / 0600 file: the anchor carries the owner's verbatim prompt text.
+            mkdirSync(baseDir, { recursive: true, mode: DIR_MODE });
+            appendFileSync(
+              join(baseDir, 'feedback-anchors.jsonl'),
+              JSON.stringify(anchor) + '\n',
+              { encoding: 'utf8', mode: FILE_MODE },
+            );
           } catch {
             /* corpus append failure must never break the rating */
           }

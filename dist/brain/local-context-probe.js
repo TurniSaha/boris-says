@@ -20,10 +20,10 @@
  *    separate, PERMISSIVE scan: we want assistant lines + any mode/effort fields, which
  *    the typed gate deliberately rejects.
  */
-import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { readFileCapped } from '../jsonl/read-capped.js';
 /** Test-command signals (case-folded substring match) that count as "documented". */
 const TEST_CMD_SIGNALS = [
     'npm test',
@@ -41,14 +41,14 @@ const TEST_CMD_SIGNALS = [
 ];
 /** Phrases that indicate plan mode is MANDATED (not merely mentioned). */
 const PLAN_MANDATE_WORDS = ['always', 'mandatory', 'must', 'required'];
-/** Default file reader: utf8, null on any error (missing/permission/etc). NEVER throws. */
+/**
+ * Default file reader: utf8, null on any error (missing/permission/etc). NEVER throws.
+ * Size-capped (readFileCapped) so a pathologically huge transcript `.jsonl` skips rather
+ * than balloons the detached judge's memory. The 32 MiB cap is far above any real config
+ * file or session transcript, so a legitimate read is never dropped.
+ */
 function defaultReadFile(p) {
-    try {
-        return readFileSync(p, 'utf8');
-    }
-    catch {
-        return null;
-    }
+    return readFileCapped(p);
 }
 /** Default git runner: spawnSync, trimmed stdout on success, null on any error/failure. */
 function defaultRunGit(args, cwd) {
