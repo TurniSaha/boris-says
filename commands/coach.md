@@ -12,8 +12,12 @@ it runs a tiny path-anchored node script that read-merge-writes `state.json` /
 
 Run the coach CLI with the requested subcommand and report its output verbatim:
 
-!`command -v node >/dev/null 2>&1 && node "${CLAUDE_PLUGIN_ROOT}/dist/coach-cmd.js" '$ARGUMENTS' || echo "node not found — coach CLI unavailable"`
+!`node "${CLAUDE_PLUGIN_ROOT}/dist/coach-cmd.js" '$ARGUMENTS'`
 
+> The bare `node` invocation matches the declared `Bash(node:*)` permission so fresh installs
+> never hit an approval wall (if node is missing the command errors visibly — install node).
+> If bare `/coach` does not resolve on your build, use the namespaced form `/boris-says:coach <sub>`.
+>
 > Note: `$ARGUMENTS` is SINGLE-QUOTED above so the shell never runs command substitution
 > on it (e.g. `find $(rm -rf x)` is passed as literal text, never executed). It arrives as
 > ONE argv element; the CLI splits it into subcommand + query itself. A literal single
