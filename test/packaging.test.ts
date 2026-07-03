@@ -15,7 +15,7 @@ describe('.claude-plugin/plugin.json (SPEC §11.1)', () => {
 
   it('parses and has name/version/author', () => {
     expect(plugin.name).toBe('boris-says');
-    expect(plugin.version).toBe('1.0.0');
+    expect(plugin.version).toMatch(/^\d+\.\d+\.\d+$/); // valid semver (bumped every release — do NOT pin a literal)
     expect(typeof plugin.description).toBe('string');
     expect(plugin.author).toEqual({ name: 'TurniSaha', email: 'turni.saha@gmail.com' });
   });
@@ -85,11 +85,18 @@ describe('.claude-plugin/marketplace.json (SPEC §11.2)', () => {
     expect(market.owner.email).toBe('turni.saha@gmail.com');
   });
 
+  it('all manifests agree on version (a mismatch silently ships stale code via the version-keyed cache)', () => {
+    const pkg = readJson('package.json');
+    expect(plugin.version).toBe(pkg.version);
+    expect(market.metadata.version).toBe(pkg.version);
+    expect(market.plugins[0].version).toBe(pkg.version);
+  });
+
   it('plugins[0] matches plugin.json name, source "./", version + license', () => {
     const p = market.plugins[0];
     expect(p.name).toBe(plugin.name);
     expect(p.source).toBe('./');
-    expect(p.version).toBe('1.0.0');
+    expect(p.version).toBe(plugin.version); // marketplace entry must track plugin.json in lockstep
     expect(p.license).toBe('MIT');
   });
 });

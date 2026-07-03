@@ -1,6 +1,6 @@
 {
   "name": "boris-says",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Boris Says — the real-time coach in your corner. Boris Cherny watches how you drive Claude Code and speaks only when it matters. Local-only, no server.",
   "type": "module",
   "license": "MIT",
@@ -33,9 +33,21 @@
     "prepublishOnly": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "eval:dry": "npm run build && node eval/harness/dry-run.mjs",
+    "eval:gen-dry": "npm run build && node eval/harness/generators/dry-gen.mjs",
+    "eval:score-dry": "node eval/harness/scoring/dry-score.mjs",
+    "eval:council-dry": "node eval/anchors/dry-council.mjs",
+    "eval:council": "node eval/anchors/run-council-live.mjs",
+    "eval:calibrate-dry": "node eval/calibrate-kappa-dry.mjs",
+    "eval:calibrate": "npm run build && node eval/calibrate-kappa.mjs",
+    "eval:matrix-dry": "npm run build && node eval/run-matrix-dry.mjs",
+    "eval:matrix": "npm run build && node eval/run-matrix.mjs",
     "catalog:gen": "tsc && node -e \"import('./dist/capability/catalog.js').then(m=>require('fs').writeFileSync('data/catalog.json', JSON.stringify(m.CAPABILITY_CATALOG, null, 2)+'\\n'))\"",
     "refresh-index": "npm run build && node scripts/refresh-skill-index.mjs",
-    "gate": "npm run build && vitest run"
+    "conformance": "node eval/build/check-spec-conformance.mjs",
+    "conformance:bless": "node eval/build/bless-harness.mjs",
+    "gate": "npm run build && npm test && npm run conformance",
+    "version:bump": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
