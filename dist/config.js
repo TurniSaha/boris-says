@@ -1,0 +1,79 @@
+import { join } from 'node:path';
+import { DEFAULT_BASE_DIR } from './state/store.js';
+/** The compiled judge filename relative to the dist root. */
+export const JUDGE_FILENAME = 'judge.js';
+// ── M2 same-turn coaching: the Stop-hook mailbox drain (PLAN §B Step 1) ────────
+/**
+ * How long the `Stop` hook is willing to wait for the concurrently-running judge's tip
+ * before giving up (the tip then surfaces NEXT turn via the labeled UPS backstop).
+ * Owner-locked at 7s: near-guarantees same-turn delivery even on fast turns, and the
+ * cost is only ever a tail on the END of a fast COACHABLE turn — never on prompt entry.
+ * Well-formed (silent) turns exit early on the judge-done marker [A2], not this cap.
+ */
+export const STOP_DRAIN_POLL_MS = 7000;
+/** The poll tick between mailbox claims inside the Stop drain. */
+export const STOP_DRAIN_INTERVAL_MS = 250;
+/**
+ * W2-OUTCOME scoping: a STABLE project key derived from the session's cwd. Fixes the
+ * confirmed cross-project leak — a `last-outcome.json` is GLOBAL, so ending a session in
+ * project A must not surface its recap in project B. The recap is only shown when the
+ * record's projectKey matches the current session's. A null/empty cwd → '' (unscoped),
+ * which NEVER matches, so an unknown-project record is never surfaced (fail-safe).
+ *
+ * Hotfix keeps this dependency-free (normalized absolute cwd, case-folded on darwin/win).
+ * A future build may refine to the git-toplevel so worktrees/subdirs of one repo collapse.
+ */
+export function projectKeyForCwd(cwd) {
+    if (typeof cwd !== 'string' || cwd.trim().length === 0)
+        return '';
+    let key = cwd.trim().replace(/[/\\]+$/, ''); // strip trailing slash(es).
+    if (process.platform === 'darwin' || process.platform === 'win32')
+        key = key.toLowerCase();
+    return key;
+}
+/**
+ * Resolve the coach base dir: PROMPT_COACH_DIR (when set + non-empty) else
+ * ~/.claude/prompt-coach. Pure — depends only on the passed env (+ homedir default).
+ */
+export function resolveBaseDir(env = process.env) {
+    const override = env.PROMPT_COACH_DIR;
+    if (typeof override === 'string' && override.trim().length > 0)
+        return override;
+    return DEFAULT_BASE_DIR;
+}
+/** The concrete state/patterns paths under the base dir (§2). Mailbox/inbox are owned by the store. */
+export function paths(env = process.env) {
+    const baseDir = resolveBaseDir(env);
+    return {
+        baseDir,
+        statePath: join(baseDir, 'state.json'),
+        patternsPath: join(baseDir, 'patterns.json'),
+        mailboxDir: join(baseDir, 'mailbox'),
+        inboxDir: join(baseDir, 'inbox'),
+    };
+}
+/**
+ * Resolve the absolute path to the compiled judge (`dist/judge.js`) the hook spawns
+ * (§8.1). Anchored to CLAUDE_PLUGIN_ROOT/dist when the plugin root is known, else to the
+ * hook's own dist dir (`hookDirname`, i.e. the dir the compiled hook.js lives in — both
+ * hook.js and judge.js land in dist/). NEVER cwd-relative.
+ *
+ * @param hookDirname the directory of the running hook (pass `__dirname`-equivalent;
+ *                    for ESM the caller derives it from import.meta.url).
+ */
+export function resolveJudgePath(hookDirname, env = process.env) {
+    const pluginRoot = env.CLAUDE_PLUGIN_ROOT;
+    if (typeof pluginRoot === 'string' && pluginRoot.trim().length > 0) {
+        return join(pluginRoot, 'dist', JUDGE_FILENAME);
+    }
+    // hookDirname is already the dist dir (the hook compiles to dist/hook.js), so the
+    // judge is a sibling. This is __dirname-relative, never cwd-relative.
+    return join(hookDirname, JUDGE_FILENAME);
+}
+/**
+ * Is the coach enabled? Reads `state.enabled` via the injected store (defaults to true
+ * for a fresh install). Never throws — the store read returns the default on any error.
+ */
+export function isEnabled(store) {
+    return store.getState().enabled !== false;
+}

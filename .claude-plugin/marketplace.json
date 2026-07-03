@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "boris-says",
+  "owner": {
+    "name": "TurniSaha",
+    "email": "turni.saha@gmail.com"
+  },
+  "metadata": {
+    "description": "Boris Says — the real-time coach in your corner. Boris Cherny watches how you drive Claude Code and speaks only when it matters. Local-only, no server.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "boris-says",
+      "source": "./",
+      "description": "Boris Says — the real-time coach in your corner. Boris Cherny watches how you drive Claude Code and speaks only when it matters. Local-only, no server.",
+      "version": "1.0.0",
+      "license": "MIT"
+    }
+  ]
+}
