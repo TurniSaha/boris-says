@@ -17,15 +17,15 @@ describe('formatCoachBanner — the loud ANSI panel', () => {
   it('renders ANSI SGR colour bytes (the loud fill)', () => {
     const out = formatCoachBanner('add a plan first');
     expect(out).toContain(ESC); // contains escape sequences
-    expect(out).toContain('🤖  Boris Cherny is here to coach!');
+    expect(out).toContain("🤖  Boris says: I'm in your corner!");
   });
 
   it('starts with a leading blank line and a title strip', () => {
     const out = formatCoachBanner('hi');
     const lines = out.split('\n');
     expect(lines[0]).toBe(''); // leading blank lifts it off the prompt echo
-    // the title strip line carries the Boris Cherny coach label
-    expect(out).toContain('Boris Cherny');
+    // the title strip line carries the Boris banner label
+    expect(out).toContain("Boris says");
   });
 
   it('every rendered (non-leading) line pads to the fixed panel width (stripped fallback reads as a block)', () => {

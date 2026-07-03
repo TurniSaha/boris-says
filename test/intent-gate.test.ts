@@ -162,7 +162,7 @@ describe('intent gate — suppress-only (never causes a fire)', () => {
     );
     expect(res).not.toBeNull();
     expect(res!.lever).toBeUndefined();
-    expect(res!.tip).toContain('corner');
+    expect(res!.tip).toContain('Watch-first');
     expect(res!.tip).not.toContain('runnable check');
   });
 });

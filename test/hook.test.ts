@@ -135,7 +135,7 @@ describe('runHook — (0) synchronous sentinel (the true hello-world health chec
 
     // The banner prints immediately, this turn — not via the mailbox/next-turn path.
     expect(written.join('')).toContain('make lemonade!');
-    expect(written.join('')).toContain('Boris Cherny');
+    expect(written.join('')).toContain('Boris says');
     // And NO background judge was spawned (pure synchronous — works even if claude -p is down).
     expect(spawn.calls).toHaveLength(0);
   });

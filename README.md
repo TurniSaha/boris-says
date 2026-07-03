@@ -10,8 +10,8 @@ Entirely on your own machine, no server.
 It stays quiet when you're already prompting well — the survival rule is **precision over recall**: a
 coach that fires weak or wrong tips gets disabled, so this one is built to shut up.
 
-> **Status:** built and installable. Committed `dist/` (zero runtime dependencies), full test
-> gate green. Install with the steps below. See [`docs/SPEC.md`](docs/SPEC.md) for the design spec.
+> **Status:** built and installable. Committed `dist/` (zero runtime dependencies), full test +
+> conformance gate green. Install with the steps below. See [`docs/SPEC.md`](docs/SPEC.md) for the design spec.
 
 ## What it does during your session
 
@@ -57,18 +57,11 @@ prompts stay silent on purpose.
 
 ## Install
 
-In Claude Code, add the marketplace and install the plugin (the committed `dist/` means there is **no build step**):
+From a clone of this repo (the committed `dist/` means there is **no build step**):
 
 ```text
 # In Claude Code:
-/plugin marketplace add TurniSaha/boris-says
-/plugin install boris-says@boris-says
-```
-
-**Local clone alternative** — if you cloned this repo instead, point the marketplace at your local path:
-
-```text
-/plugin marketplace add /path/to/boris-says
+/plugin marketplace add /path/to/Claude-Coach
 /plugin install boris-says@boris-says
 ```
 
@@ -95,7 +88,7 @@ freezes):
 build the auth system and the billing dashboard and migrate the db then deploy to prod
 ```
 ```text
-  🤖  Boris Cherny is here to coach!
+  🤖  Boris says: I'm in your corner!
 
   This bundles four separate deliverables — the auth system, the billing
   dashboard, the DB migration, and the prod deploy — each of which needs its own
@@ -109,7 +102,7 @@ build the auth system and the billing dashboard and migrate the db then deploy t
 make the dashboard better
 ```
 ```text
-  🤖  Boris Cherny is here to coach!
+  🤖  Boris says: I'm in your corner!
 
   "Better" how — is it load speed, a confusing chart, or the mobile layout?
   Name the one thing and how you'll know it improved before you start.
@@ -122,7 +115,7 @@ make the dashboard better
 DROP the users table in prod and re-run the migration
 ```
 ```text
-  🤖  Boris Cherny is here to coach!
+  🤖  Boris says: I'm in your corner!
 
   Take a snapshot of users (or run it through a reversible migration with a
   rollback) BEFORE you DROP it on prod — a dropped table has no undo.
@@ -170,7 +163,7 @@ There is also an offline eval harness (a blind judge scored against owner-ratifi
 numbers: on the 60-anchor set the blind text-only judge agreed with the author's labels 52/60 (~87%),
 Cohen's κ ≈ 0.56 — which does **not** clear the project's strict κ ≥ 0.60 calibration bar, partly a
 structural ceiling (many real prompts are image-rich; a text judge can't see what you saw). So the shipped
-quality signal is the live 👍/👎 loop, not a published precision number.
+quality signal is the live 👍/👎 loop, not a published precision number. See `eval/` for the methodology.
 
 ## Controls
 
@@ -213,7 +206,7 @@ installed without you running the command yourself. State lives in plain JSON un
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the build/test workflow and repo layout. The one hard rule:
-`npm run gate` (build + tests) must stay green, and `dist/` is committed so installs need no
+`npm run gate` (build + tests + conformance) must stay green, and `dist/` is committed so installs need no
 build step — rebuild it (`npm run build`) and commit it alongside any `src/` change.
 
 ## License

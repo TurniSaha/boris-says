@@ -21,7 +21,7 @@
  * outcome ledger, the per-dev cadence, or the aggregate ceiling. It is purely a
  * display-pipe heartbeat.
  *
- * PORT NOTE: ported verbatim from the upstream coach service `pm-service/src/triggers/coach-liveness.ts`.
+ * PORT NOTE: ported verbatim from bis-gastown `pm-service/src/triggers/coach-liveness.ts`.
  * RE-KEY (spec §15c, decision #6): the source keyed the first-seen ping on
  * `roomId + sessionId`; locally `roomId` is dropped (single user) so the de-dup key is
  * `sessionId` alone — the signature is `check(sessionId, text)`.
@@ -56,8 +56,8 @@ export const COACH_CONNECTED_PING =
  * Kept as one \n-joined string so the banner's wrapBody renders it as the tour body.
  */
 export const COACH_FIRST_RUN_TOUR = [
-  "Boris says: I'm in your corner — watching how you drive Claude Code in real time, and I " +
-    "only speak when it matters: the right plan, skill, or habit, exactly when you need it.",
+  "I watch how you drive Claude Code in real time and only speak when it matters — the " +
+    "right plan, skill, or habit, exactly when you need it.",
   "Watch-first: I observe silently for your first ~3 sessions / 30 prompts before I critique " +
     "— run /coach status to see what I withheld while I learned your style.",
   "Need a tool now? Try /coach find <task> (e.g. /coach find pdf extraction) to pull the right " +

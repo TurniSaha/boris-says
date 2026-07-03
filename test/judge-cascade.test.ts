@@ -123,7 +123,7 @@ describe('runQualityCascade — liveness', () => {
     );
     expect(res).not.toBeNull();
     // Tour-specific, unbroken phrases (the banner soft-wraps, so assert short fragments).
-    expect(res!.tip).toContain('corner');
+    expect(res!.tip).toContain('Watch-first');
     expect(res!.tip).toContain('/coach find');
     expect(res!.tip).toContain('/coach status');
     expect(COACH_FIRST_RUN_TOUR).toContain('Watch-first');
@@ -722,7 +722,7 @@ describe('runQualityCascade — local-context suppression gate (Part B)', () => 
       baseInput({ sessionId, transcript: [], firstSeen: true, localContext: { mode: 'plan' } }),
     );
     expect(res).not.toBeNull();
-    expect(res!.tip).toContain('corner'); // the tour surfaces.
+    expect(res!.tip).toContain('Watch-first'); // the tour surfaces.
     expect(res!.tip).not.toContain('sketch the data contract'); // tip suppressed.
     expect(res!.lever).toBeUndefined(); // tour carries no lever.
   });

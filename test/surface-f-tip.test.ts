@@ -73,7 +73,7 @@ describe('F-TIP — the tip surfaces via systemMessage (human-visible, non-steer
     const parsed = JSON.parse(stdout); // it IS a single JSON object now.
     // The full 🐾 banner (with ANSI) rides inside systemMessage, byte-for-byte.
     expect(parsed.systemMessage).toBe(banner);
-    expect(parsed.systemMessage).toContain('🤖  Boris Cherny is here to coach!');
+    expect(parsed.systemMessage).toContain("🤖  Boris says: I'm in your corner!");
     expect(parsed.systemMessage).toContain('sketch the data contract first');
   });
 

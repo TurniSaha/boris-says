@@ -291,12 +291,12 @@ describe('runJudge — first-run TOUR is ONCE PER INSTALL (item 3)', () => {
 
     await silentTurn(store, patterns, 'sess-1');
     const first = store.claimMailbox('sess-1');
-    expect(first.some((t) => t.message.includes('corner'))).toBe(true); // tour on install turn 1.
+    expect(first.some((t) => t.message.includes('Watch-first'))).toBe(true); // tour on install turn 1.
 
     // A brand-new SESSION on the same install must NOT re-tour (once per install, not session).
     await silentTurn(store, patterns, 'sess-2');
     const second = store.claimMailbox('sess-2');
-    expect(second.some((t) => t.message.includes('corner'))).toBe(false);
+    expect(second.some((t) => t.message.includes('Watch-first'))).toBe(false);
   });
 
   it('an ENGAGED legacy install gets NO surprise tour on upgrade (migration)', async () => {
@@ -309,7 +309,7 @@ describe('runJudge — first-run TOUR is ONCE PER INSTALL (item 3)', () => {
 
     await silentTurn(store, patterns, 'sess-upgrade');
     const tips = store.claimMailbox('sess-upgrade');
-    expect(tips.some((t) => t.message.includes('corner'))).toBe(false); // no surprise tour.
+    expect(tips.some((t) => t.message.includes('Watch-first'))).toBe(false); // no surprise tour.
   });
 });
 
@@ -360,8 +360,8 @@ describe('runJudge — welcome_ping ratification pin (owner-accepted surface, M1
     const tips = store.readAndClearMailbox('sPing');
     // The first-run TOUR deposited AND the habit tip deposited on the SAME turn (tour ≠
     // coaching → yield-to-quality does not trigger). The banner soft-wraps, so match a
-    // tour-specific token ("corner") that survives wrapping.
-    expect(tips.some((t) => t.kind === 'quality' && t.message.includes('corner'))).toBe(true);
+    // tour-specific token ("Watch-first") that survives wrapping.
+    expect(tips.some((t) => t.kind === 'quality' && t.message.includes('Watch-first'))).toBe(true);
     expect(tips.some((t) => t.kind === 'habit')).toBe(true);
 
     const state = store.getState();
@@ -847,7 +847,7 @@ describe('M2 — runJudge deposits carry prompt + turnId; judge-done marker set 
     );
     const tips = store.claimMailbox('sM2p');
     expect(tips).toHaveLength(1);
-    expect(tips[0].message).toContain('corner'); // the tour (banner soft-wraps; token survives).
+    expect(tips[0].message).toContain('Watch-first'); // the tour (banner soft-wraps; token survives).
     expect(tips[0].prompt).toBeUndefined();
     expect(tips[0].turnId).toBe('sM2p#t1');
   });

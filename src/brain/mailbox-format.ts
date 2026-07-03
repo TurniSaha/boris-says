@@ -1,7 +1,7 @@
 /**
  * src/brain/mailbox-format.ts — the ANSI filled-panel banner renderer.
  *
- * EXTRACTION (spec §14) of the formatting half of the upstream coach service
+ * EXTRACTION (spec §14) of the formatting half of bis-gastown
  * `pm-service/src/coach/mailbox-nudge.ts`: `formatCoachBanner` + its private helpers
  * (`panelLine`, `wrapBody`) + the consts they depend on (`ESC`, `RESET`,
  * `PANEL_WIDTH = 50`, `TITLE`, `BODY`). The in-memory FIFO (`createMailboxNudge`,
@@ -119,7 +119,7 @@ export function formatCoachBanner(message: string, opts: { withRateHint?: boolea
   return [
     '',
     panelLine(TITLE, ''),
-    panelLine(TITLE, '🤖  Boris Cherny is here to coach!'),
+    panelLine(TITLE, '🤖  Boris says: I\'m in your corner!'),
     panelLine(TITLE, ''),
     ...bodyLines.map((l) => panelLine(BODY, l)),
     ...footer,

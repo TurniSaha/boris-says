@@ -125,7 +125,7 @@ describe('F-L34b demoted — no silence-conditioned lever remains in the cascade
     );
     expect(res).not.toBeNull();
     expect(res!.lever).toBeUndefined();
-    expect(res!.tip).toContain('corner');
+    expect(res!.tip).toContain('Watch-first');
     expect(res!.tip).not.toContain(RETIRED_PRUNE_TEXT);
   });
 });

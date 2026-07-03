@@ -13,21 +13,13 @@ context). It never blocks your prompt.
   subscription — **no per-call charge**; raw API only if you set
   `PROMPT_COACH_USE_API=1`)
 
-## Install
+## Install (local marketplace)
 
-In Claude Code, add the marketplace and install the plugin:
+From a clone of this repo:
 
 ```
 # In Claude Code:
-/plugin marketplace add TurniSaha/boris-says
-/plugin install boris-says@boris-says
-```
-
-**Local clone alternative** — if you cloned this repo instead, point the
-marketplace at your local path:
-
-```
-/plugin marketplace add /path/to/boris-says
+/plugin marketplace add /path/to/Claude-Coach
 /plugin install boris-says@boris-says
 ```
 
@@ -51,8 +43,7 @@ you on, e.g.:
 rewrite the whole billing module onto a new pricing engine
 ```
 
-At the **end of that same turn** you should see the "🤖 Boris Cherny is here to
-coach!" banner with a one-line nudge (e.g. "sketch the steps and the riskiest part
+At the **end of that same turn** you should see the "🤖 Boris says: I'm in your corner!" banner with a one-line nudge (e.g. "sketch the steps and the riskiest part
 before diving in"). The judge runs in the background so your prompt never freezes;
 if it finishes after the turn ends, the tip arrives on your next prompt with a
 `⏪ about your prompt: "…"` label. Terse, expert, or continuation prompts stay

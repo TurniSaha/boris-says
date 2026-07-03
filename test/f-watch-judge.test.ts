@@ -214,7 +214,7 @@ describe('M5 — critique verdict during the window is WITHHELD (observe-only)',
     const tips = store.claimMailbox(sid);
     expect(tips).toHaveLength(1);
     expect(tips[0].kind).toBe('quality');
-    expect(tips[0].message).toContain('corner'); // the bare once-per-install tour.
+    expect(tips[0].message).toContain('Watch-first'); // the bare once-per-install tour.
     expect(tips[0].message).not.toContain('sketch the data contract'); // tip withheld.
     expect(tips[0].message).not.toContain('observations'); // never an announce here.
     expect(tips[0].prompt).toBeUndefined(); // tour is not "about your prompt".
@@ -222,7 +222,7 @@ describe('M5 — critique verdict during the window is WITHHELD (observe-only)',
     const w = store.getState().watch;
     expect(w?.withheldCount).toBe(1);
     expect(w?.withheld[0].tip).toContain('sketch the data contract');
-    expect(w?.withheld[0].tip).not.toContain('corner'); // tour prefix stripped.
+    expect(w?.withheld[0].tip).not.toContain('Watch-first'); // tour prefix stripped.
   });
 });
 
