@@ -10,10 +10,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   runHabitMiner,
+  temporallySeparatedSessionCount,
   MIN_NEW_EVENTS,
   MINE_COOLDOWN_MS,
+  MIN_DISTINCT_SESSIONS,
+  CONCURRENCY_WINDOW_MS,
   type MinerInput,
 } from '../src/habit/miner.js';
+import type { MinedPattern } from '../src/habit/miner-parse.js';
 import { createPatternsStore, type Pattern } from '../src/habit/patterns-store.js';
 import { defaultState, type CoachState } from '../src/state/store.js';
 import { readCorpusTypedPrompts, type CorpusPrompt } from '../src/jsonl/corpus-reader.js';
@@ -56,10 +60,12 @@ function nextSessionPatternJson(): string {
       habit: 'asked for a next-session prompt',
       fix: 'bake a prompt-handoff into your /context-handoff command',
       why_inefficient: 'retypes a handoff prose every session instead of templating it',
+      // Timestamps span three DISTINCT days so the §7.5 temporal-separation gate
+      // sees a genuine repeated-over-time habit (3 windows), not concurrent one-offs.
       occurrences: [
-        { sessionId: 's1', ts: 1, evidence: 'give me the prompt for the next session' },
-        { sessionId: 's2', ts: 2, evidence: 'write the next session prompt handoff' },
-        { sessionId: 's3', ts: 3, evidence: 'prepare the next session handoff prompt' },
+        { sessionId: 's1', ts: 1_700_000_000_000, evidence: 'give me the prompt for the next session' },
+        { sessionId: 's2', ts: 1_700_086_400_000, evidence: 'write the next session prompt handoff' },
+        { sessionId: 's3', ts: 1_700_172_800_000, evidence: 'prepare the next session handoff prompt' },
       ],
       confidence: 0.82,
     },
@@ -342,9 +348,9 @@ describe('dismissal-similarity gate (§5.5.6b)', () => {
         fix: 'take a snapshot and run it through the reversible migration pipeline',
         why_inefficient: 'irreversible data loss with no rollback path',
         occurrences: [
-          { sessionId: 's1', ts: 1, evidence: 'drop the legacy orders table directly on prod' },
-          { sessionId: 's2', ts: 2, evidence: 'truncate the audit log on production now' },
-          { sessionId: 's3', ts: 3, evidence: 'delete every row in the staging events table' },
+          { sessionId: 's1', ts: 1_700_000_000_000, evidence: 'drop the legacy orders table directly on prod' },
+          { sessionId: 's2', ts: 1_700_086_400_000, evidence: 'truncate the audit log on production now' },
+          { sessionId: 's3', ts: 1_700_172_800_000, evidence: 'delete every row in the staging events table' },
         ],
         confidence: 0.8,
       },
@@ -591,6 +597,131 @@ describe('watermark semantics — epoch-ms, NOT an event count (§7.2 corpus-rea
     const result = await runHabitMiner(baseInput({ state, corpus }));
     expect(result.mined).toBe(true);
     expect(result.nextState.lastMinedWatermark).toBe(1_700_000_000_000);
+  });
+});
+
+describe('temporal-separation gate (concurrency-collapse) — the parallel-worktree bug', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const BASE = 1_700_000_000_000; // a fixed epoch-ms anchor for readable timestamps.
+
+  /** Build a MinedPattern with the given per-occurrence (sessionId, ts) pairs. */
+  function patternWith(occ: Array<{ sessionId: string; ts: number }>): MinedPattern {
+    return {
+      habit_key: 'k:temporal',
+      match_phrases: ['give me the prompt for the next session'],
+      habit: 'x',
+      fix: 'do y',
+      why_inefficient: 'wastes time',
+      occurrences: occ.map((o, i) => ({
+        sessionId: o.sessionId,
+        ts: o.ts,
+        evidence: `give me the prompt for the next session ${i}`,
+      })),
+      confidence: 0.8,
+    };
+  }
+
+  describe('temporallySeparatedSessionCount helper', () => {
+    it("THE REPORTER'S SCENARIO: 3 distinct sessions all within ~5 min collapse to 1 window", () => {
+      const p = patternWith([
+        { sessionId: 's1', ts: BASE },
+        { sessionId: 's2', ts: BASE + 2 * 60 * 1000 },
+        { sessionId: 's3', ts: BASE + 4 * 60 * 1000 },
+      ]);
+      expect(temporallySeparatedSessionCount(p, CONCURRENCY_WINDOW_MS)).toBe(1);
+    });
+
+    it('a REAL habit: 3 distinct sessions on different days -> 3 windows', () => {
+      const p = patternWith([
+        { sessionId: 's1', ts: BASE },
+        { sessionId: 's2', ts: BASE + 1 * DAY },
+        { sessionId: 's3', ts: BASE + 2 * DAY },
+      ]);
+      expect(temporallySeparatedSessionCount(p, CONCURRENCY_WINDOW_MS)).toBe(3);
+    });
+
+    it('BOUNDARY: 2 concurrent + 1 separate -> 2 windows; add a 4th separate -> 3 windows', () => {
+      const twoPlusOne = patternWith([
+        { sessionId: 's1', ts: BASE },
+        { sessionId: 's2', ts: BASE + 60 * 1000 }, // concurrent with s1
+        { sessionId: 's3', ts: BASE + 1 * DAY }, // separate
+      ]);
+      expect(temporallySeparatedSessionCount(twoPlusOne, CONCURRENCY_WINDOW_MS)).toBe(2);
+
+      const twoPlusTwo = patternWith([
+        { sessionId: 's1', ts: BASE },
+        { sessionId: 's2', ts: BASE + 60 * 1000 }, // concurrent with s1
+        { sessionId: 's3', ts: BASE + 1 * DAY }, // separate
+        { sessionId: 's4', ts: BASE + 2 * DAY }, // separate
+      ]);
+      expect(temporallySeparatedSessionCount(twoPlusTwo, CONCURRENCY_WINDOW_MS)).toBe(3);
+    });
+
+    it("a session's representative time is its EARLIEST occurrence ts", () => {
+      // s1 has a late occurrence but an early one that anchors it concurrent with s2.
+      const p = patternWith([
+        { sessionId: 's1', ts: BASE + 3 * DAY },
+        { sessionId: 's1', ts: BASE },
+        { sessionId: 's2', ts: BASE + 60 * 1000 }, // concurrent with s1's earliest
+      ]);
+      expect(temporallySeparatedSessionCount(p, CONCURRENCY_WINDOW_MS)).toBe(1);
+    });
+
+    it('FAIL-SAFE: all occurrences ts=0 -> falls back to the distinct-session count', () => {
+      const p = patternWith([
+        { sessionId: 's1', ts: 0 },
+        { sessionId: 's2', ts: 0 },
+        { sessionId: 's3', ts: 0 },
+      ]);
+      // Degenerate all-zero corpus: never regress to zero — old distinct-session count.
+      expect(temporallySeparatedSessionCount(p, CONCURRENCY_WINDOW_MS)).toBe(3);
+    });
+
+    it('FAIL-SAFE: a MIX where some sessions are ts=0 -> the zero-ts sessions manufacture no windows', () => {
+      const p = patternWith([
+        { sessionId: 's1', ts: BASE },
+        { sessionId: 's2', ts: BASE + 1 * DAY },
+        { sessionId: 's3', ts: 0 }, // unknown-time: contributes no window
+      ]);
+      expect(temporallySeparatedSessionCount(p, CONCURRENCY_WINDOW_MS)).toBe(2);
+    });
+  });
+
+  describe('gate wired into runHabitMiner', () => {
+    /** JSON for a pattern whose 3 distinct sessions carry the given timestamps. */
+    function minedJsonWithTs(tsList: number[]): string {
+      return JSON.stringify([
+        {
+          habit_key: 'context-handoff:next-session-prompt',
+          match_phrases: [
+            'give me the prompt for the next session',
+            'write the next session prompt handoff',
+            'prepare the next session handoff prompt',
+          ],
+          habit: 'asked for a next-session prompt',
+          fix: 'bake a prompt-handoff into your /context-handoff command',
+          why_inefficient: 'retypes a handoff prose every session instead of templating it',
+          occurrences: [
+            { sessionId: 's1', ts: tsList[0], evidence: 'give me the prompt for the next session' },
+            { sessionId: 's2', ts: tsList[1], evidence: 'write the next session prompt handoff' },
+            { sessionId: 's3', ts: tsList[2], evidence: 'prepare the next session handoff prompt' },
+          ],
+          confidence: 0.82,
+        },
+      ]);
+    }
+
+    it('THE REPORTER: 3 concurrent parallel-worktree sessions -> DROPPED even though distinctSessions()==3', async () => {
+      const concurrent = minedJsonWithTs([BASE, BASE + 2 * 60 * 1000, BASE + 4 * 60 * 1000]);
+      const result = await runHabitMiner(baseInput({ backend: mockBackend(concurrent) }));
+      expect(result.upserted).toHaveLength(0);
+    });
+
+    it('a REAL habit on 3 different days -> SURVIVES', async () => {
+      const spread = minedJsonWithTs([BASE, BASE + 1 * DAY, BASE + 2 * DAY]);
+      const result = await runHabitMiner(baseInput({ backend: mockBackend(spread) }));
+      expect(result.upserted).toHaveLength(1);
+    });
   });
 });
 

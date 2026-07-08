@@ -8,6 +8,14 @@ export const MIN_NEW_EVENTS = 5;
 export const MINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 /** A habit must recur across at least this many DISTINCT sessions (§7.5 #1). */
 export const MIN_DISTINCT_SESSIONS = 3;
+/**
+ * §7.5 temporal-separation gate: two distinct sessions whose representative times are
+ * within this window are treated as plausibly-CONCURRENT (e.g. parallel git-worktree
+ * agents fired in the same half hour) and collapse to ONE time window. A real habit is
+ * repeated OVER TIME; concurrent one-offs are not. 30 minutes is generous enough to
+ * absorb a burst of parallel agents yet far below any normal inter-session cadence.
+ */
+export const CONCURRENCY_WINDOW_MS = 30 * 60 * 1000;
 /** §5.5.6b dismissal-similarity Jaccard threshold (start 0.6, tune on pilot). */
 export const DISMISSAL_JACCARD_THRESHOLD = 0.6;
 /** The miner system prompt — source-spec §4 wording + the §5.5.6a desirability rule. */
@@ -70,6 +78,60 @@ function signatureOf(phrases) {
 /** Count DISTINCT sessionIds across a mined pattern's occurrences. */
 function distinctSessions(p) {
     return new Set(p.occurrences.map((o) => o.sessionId)).size;
+}
+/**
+ * §7.5 temporal-separation gate (pure, testable). Count how many DISTINCT time windows
+ * a pattern's sessions span, where two sessions collapse to one window if their
+ * representative times are within `concurrencyWindowMs`. This is the count that must
+ * clear MIN_DISTINCT_SESSIONS for the pattern to count as a genuinely repeated-over-time
+ * habit rather than a burst of concurrent one-offs (the parallel-worktree false positive).
+ *
+ * Representative time per session = its EARLIEST occurrence `ts` (chosen over median: it
+ * is the moment the behavior first appeared in that session, is cheap, and is stable — a
+ * later occurrence in one session can never make two sessions look artificially separated).
+ *
+ * FAIL-SAFE on missing timestamps (`ts === 0`, absent/unparseable per miner-parse.ts):
+ *   - A session whose representative time is 0 CANNOT be proven separated, so it does NOT
+ *     contribute a distinct window (conservative: unknown-time sessions never manufacture a
+ *     habit). It is simply excluded from the window count.
+ *   - BUT if EVERY occurrence lacks a timestamp (an older timestamp-less corpus), we must
+ *     not regress the miner to zero habits forever. In that degenerate all-zero case we
+ *     fall back to the OLD distinct-session count so the gate never makes the miner
+ *     strictly worse on timestamp-less corpora.
+ *
+ * This is ADDITIVE precision: it only ever DROPS would-be habits (concurrent ones); it can
+ * never manufacture a fire that distinctSessions() did not already permit.
+ */
+export function temporallySeparatedSessionCount(p, concurrencyWindowMs) {
+    // All-zero fallback: no occurrence carries a usable timestamp → old distinct count.
+    if (p.occurrences.every((o) => o.ts === 0)) {
+        return distinctSessions(p);
+    }
+    // Representative time per DISTINCT session = its earliest known (non-zero) occurrence ts.
+    // Sessions with only ts=0 occurrences have no provable time and are dropped below.
+    const repBySession = new Map();
+    for (const o of p.occurrences) {
+        if (o.ts === 0)
+            continue; // unknown time: does not anchor a window.
+        const prev = repBySession.get(o.sessionId);
+        if (prev === undefined || o.ts < prev)
+            repBySession.set(o.sessionId, o.ts);
+    }
+    const times = [...repBySession.values()].sort((a, b) => a - b);
+    if (times.length === 0)
+        return 0;
+    // Greedy window count: open the first window at the earliest time; each subsequent
+    // session opens a NEW window only if it is > concurrencyWindowMs past the current
+    // window's anchor. Sessions within the window collapse into it.
+    let windows = 1;
+    let anchor = times[0];
+    for (let i = 1; i < times.length; i += 1) {
+        if (times[i] - anchor > concurrencyWindowMs) {
+            windows += 1;
+            anchor = times[i];
+        }
+    }
+    return windows;
 }
 /**
  * §5.5.6c self-match calibration: how many of the pattern's OWN occurrences self-match
@@ -140,8 +202,13 @@ export async function runHabitMiner(input) {
     }
     const mined = parseMinerPatterns(response);
     // ── Structural guardrails (§5.5.6a / §7.5): drop < 3 distinct sessions, empty fix,
-    // empty why_inefficient.
+    // empty why_inefficient. The temporal-separation gate sits right beside the
+    // distinct-session guardrail: >= 3 distinct sessions is necessary but NOT sufficient —
+    // they must also span >= MIN_DISTINCT_SESSIONS distinct TIME WINDOWS, so a burst of
+    // parallel-worktree agents (3 concurrent one-offs) does not masquerade as a repeated
+    // habit. Additive precision: it only ever drops concurrent would-be habits.
     const structurallyValid = mined.filter((p) => distinctSessions(p) >= MIN_DISTINCT_SESSIONS &&
+        temporallySeparatedSessionCount(p, CONCURRENCY_WINDOW_MS) >= MIN_DISTINCT_SESSIONS &&
         p.fix.trim().length > 0 &&
         p.why_inefficient.trim().length > 0);
     // ── Self-match calibration (§5.5.6c): the phrases must generalize across the dev's
