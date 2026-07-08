@@ -28,7 +28,9 @@ export const MINER_SYSTEM = 'You analyze a developer\'s recent TYPED prompts for
     '{ "habit_key": "<stable normalized <topic>:<behavior> slug, e.g. context-handoff:next-session-prompt>", ' +
     '"match_phrases": ["3 to 6 representative typed phrasings of the ask"], ' +
     '"anchorSignature": ["optional normalized anchor tokens"], ' +
-    '"habit": "<human-readable habit description>", ' +
+    '"habit": "<human-readable habit description; PREFER a short participle phrase that reads ' +
+    'cleanly after \\"you\'ve\\" — e.g. \\"asked for a next-session prompt\\" — but a full ' +
+    'sentence is also accepted>", ' +
     '"fix": "<concrete suggested process/tooling fix — non-empty>", ' +
     '"why_inefficient": "<short string naming the concrete waste/risk the fix removes — non-empty>", ' +
     '"occurrences": [{ "sessionId": "...", "ts": 0, "evidence": "<verbatim cited prompt text>" }], ' +

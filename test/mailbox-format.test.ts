@@ -70,6 +70,39 @@ describe('formatCoachBanner — the loud ANSI panel', () => {
     expect(bodyLineCount).toBeGreaterThanOrEqual(1);
   });
 
+  it('renders a RICH ~600-char habit tip IN FULL across wrapped yellow lines (no cap, no dropped tail)', () => {
+    // The owner's exact composed tip (grammar-fixed neutral lead). ~600 chars of GOOD advice
+    // that must survive the banner in full — every word wrapped, nothing clipped/dropped.
+    const composed =
+      '🐾 habit: noticed a recurring pattern across your last 4 sessions — Across multiple ' +
+      'sessions the developer repeatedly stops to manually ask whether background agents or ' +
+      'subagent pipelines are actually alive and executing — because there is no visible, ' +
+      'self-reporting status signal from the agents themselves. Fix: Every multi-agent or ' +
+      "background-task invocation should immediately emit a structured status line (e.g. " +
+      "'🟢 Agent 1/5 started — task: X [PID 12345]') and write a live heartbeat/mtime to a " +
+      'shared status file (e.g. .agent-status.json) that a watch command can tail. Add a ' +
+      "/agent-status slash command that reads that file and prints a table. This turns " +
+      "reactive 'are you running?' into a proactive observable.";
+    const out = formatCoachBanner(composed);
+    const stripped = stripAnsi(out);
+    // The full tail survives, un-clipped (no mid-word "proactive observable.." guillotine).
+    expect(stripped).toContain('proactive observable.');
+    expect(stripped).not.toContain('observable..');
+    expect(stripped).not.toContain('..\n'); // no mid-word ".." clip anywhere.
+    expect(stripped).toContain('.agent-status.json');
+    // Reassemble the wrapped yellow body (words are re-joined across the soft wraps) and
+    // assert the head + middle + every load-bearing word is present, in order, verbatim.
+    const bodyText = stripped
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.includes('Boris says'))
+      .join(' ');
+    expect(bodyText).toContain('noticed a recurring pattern across your last 4 sessions');
+    for (const word of ['heartbeat/mtime', 'slash', 'reactive', 'proactive', 'observable.']) {
+      expect(bodyText).toContain(word);
+    }
+  });
+
   it('CLIPS only a single un-splittable token longer than 50 chars (defensive backstop)', () => {
     const token = 'x'.repeat(80);
     const out = formatCoachBanner(token);

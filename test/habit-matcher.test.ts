@@ -158,6 +158,81 @@ describe('composeHabitTip — cites the count + fix (§7.4/§7.5 #2)', () => {
   });
 });
 
+describe('composeHabitTip — GRAMMAR-ROBUST lead for ANY habit shape (owner fix A)', () => {
+  // The owner's EXACT sentence-shaped habit + fix. This whole string is GOOD ADVICE and
+  // must render GRAMMATICALLY (neutral lead, NOT "you've Across...") with the FULL habit
+  // + fix text preserved verbatim — nothing dropped, nothing truncated.
+  const OWNER_HABIT =
+    'Across multiple sessions the developer repeatedly stops to manually ask whether ' +
+    'background agents or subagent pipelines are actually alive and executing — because ' +
+    'there is no visible, self-reporting status signal from the agents themselves.';
+  const OWNER_FIX =
+    "Every multi-agent or background-task invocation should immediately emit a structured " +
+    "status line (e.g. '🟢 Agent 1/5 started — task: X [PID 12345]') and write a live " +
+    'heartbeat/mtime to a shared status file (e.g. .agent-status.json) that a watch command ' +
+    "can tail. Add a /agent-status slash command that reads that file and prints a table. " +
+    "This turns reactive 'are you running?' into a proactive observable.";
+
+  it('a SENTENCE-shaped habit renders grammatically (neutral lead, never "you\'ve <Sentence>")', () => {
+    const tip = composeHabitTip(mkPattern({ habit: OWNER_HABIT, fix: OWNER_FIX }), 4);
+    // NEVER the ungrammatical "you've Across ..." lead.
+    expect(tip).not.toContain("you've Across");
+    expect(tip).not.toContain("you've The ");
+    // The FULL habit + fix text survive verbatim (nothing dropped / truncated).
+    expect(tip).toContain(OWNER_HABIT);
+    expect(tip).toContain(OWNER_FIX);
+    // Still cites the session count.
+    expect(tip).toContain('4 sessions');
+  });
+
+  it('the owner tip does NOT end in a double-period "..." (fix already ends in ".")', () => {
+    const tip = composeHabitTip(mkPattern({ habit: OWNER_HABIT, fix: OWNER_FIX }), 4);
+    expect(tip.endsWith('observable.')).toBe(true);
+    expect(tip).not.toContain('observable..');
+  });
+
+  it('a well-shaped participle habit stays BYTE-IDENTICAL to today\'s "you\'ve ..." output (pin)', () => {
+    const p = mkPattern({
+      habit: 'repeatedly asked whether background agents are running',
+      fix: 'emit a status line per agent',
+    });
+    expect(composeHabitTip(p, 3)).toBe(
+      "🐾 habit: you've repeatedly asked whether background agents are running " +
+        'in your last 3 sessions — emit a status line per agent.',
+    );
+  });
+
+  it('the canonical stored pattern is BYTE-IDENTICAL (well-shaped participle, unchanged)', () => {
+    expect(composeHabitTip(mkPattern(), 3)).toBe(
+      "🐾 habit: you've asked for a next-session prompt in your last 3 sessions — " +
+        'bake a prompt-handoff into your /context-handoff command.',
+    );
+  });
+
+  it('a "the developer"-containing habit uses the neutral lead (not "you\'ve")', () => {
+    const p = mkPattern({
+      habit: 'the developer keeps re-asking for a plan',
+      fix: 'add a plan step',
+    });
+    const tip = composeHabitTip(p, 3);
+    expect(tip).not.toContain("you've the developer");
+    expect(tip).toContain('the developer keeps re-asking for a plan');
+    expect(tip).toContain('add a plan step');
+  });
+
+  it('the /coach build draft affordance STILL appends on a sentence-shaped habit', () => {
+    const p = mkPattern({
+      habit: OWNER_HABIT,
+      fix: OWNER_FIX,
+      draft: { kind: 'skill', name: 'agent-status', content: '---\nname: x\ndescription: d\n---\nbody', createdAt: 1 },
+    });
+    const tip = composeHabitTip(p, 4);
+    expect(tip).toContain(OWNER_HABIT);
+    expect(tip).toContain(OWNER_FIX);
+    expect(tip).toContain('a draft skill is ready: run /coach build to write it for review (or /coach dismiss to reject)');
+  });
+});
+
 describe('looksHandoffish — cheap pre-filter for the fuzzy fallback', () => {
   it('true for handoff-ish prompts', () => {
     expect(looksHandoffish('what should I do in the next session?')).toBe(true);
